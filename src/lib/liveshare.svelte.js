@@ -1,3 +1,8 @@
+export const internal = $state({
+    initComplete: false,
+    cityName: ""
+})
+
 export const openGate = $state({
     isOpen: false
 });

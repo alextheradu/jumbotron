@@ -1,187 +1,328 @@
 <script>
-    import { base } from "$app/paths";
-    import { eventName, refConsole } from "$lib/event";
+    import { resolve } from "$app/paths";
     import { page } from "$app/state";
     import { onMount } from "svelte";
-    import { checkCity, proccessCity, cityToLink } from "$lib/event";
+
+    import { eventName } from "$lib/event";
 
     import { slide } from "svelte/transition";
 
-    let city = $state("");
-    let isValid = $state(null);
+    // State to track which view/form is active: null, 'organizer', or 'attendee'
+    let userType = $state(null); 
 
-    let liveshareError = $state(null);
-    onMount(async () => {
-        let urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get("code") != null) {
-            let val = await fetch("https://api.jumbotron.hackclub.com/createSession", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    code: urlParams.get("code"),
-                    cityName: sessionStorage.getItem("refAuthCity")
-                })
-            });
-            if (!val.ok) {
-                try {
-                    let errPayload = await val.json();
-                    // This will print the actual error message sent from your backend!
-                    console.error("🔴 Backend Session Creation Error:", errPayload);
-                    
-                    liveshareError = errPayload.error || `Server responded with status ${val.status}`;
-                } catch (e) {
-                    liveshareError = `Server error: ${val.status}`;
-                }
-                let extractedCity = sessionStorage.getItem("refAuthCity");
-                if (urlParams.get("eventName") == null) {
-                    isValid = false;
-                }
+    function selectUserType(type) {
+        userType = type;
+    }
 
-                if (extractedCity !== null) {
-                    let processed = proccessCity(extractedCity);
-                    
-                    let result = await checkCity(processed);
+    function resetSelection() {
+        userType = null;
+    }
 
-                    console.log("Processed City:", processed);
-                    console.log("Is Valid Check (actual boolean):", result);
+    let widthVar = $state();
 
-                    isValid = result; 
-                    city = extractedCity;
-                }
-                
-            }
-            else {
-                let information = await val.json();
+    // State for the 4-digit code inputs
+    let digits = $state(['', '', '', '']);
+    let inputElements = [];
 
-                sessionStorage.setItem("liveshareKey", information.key);
-                sessionStorage.setItem("liveshareEmail", information.emailAddress);
-                sessionStorage.removeItem("authCode");
-                window.location.href = base + "/" + sessionStorage.getItem("refAuthCity") + "/control/?liveshare=true" 
-                return;
-            }
-        }
-        if (urlParams.get("error") != null) {
-            liveshareError = urlParams.get("error");
-            return;
-        }
-        let extractedCity = urlParams.get('eventName');
-        if (urlParams.get("eventName") == null) {
-            isValid = false;
+    function handleInput(event, index) {
+        const value = event.target.value;
+        
+        if (value.length > 1) {
+            digits[index] = value[value.length - 1];
         }
 
-        if (extractedCity !== null) {
-            let processed = proccessCity(extractedCity);
-            
-            let result = await checkCity(processed);
-
-            console.log("Processed City:", processed);
-            console.log("Is Valid Check (actual boolean):", result);
-
-            isValid = result; 
-            city = extractedCity;
+        if (digits[index] && index < 3) {
+            inputElements[index + 1].focus();
         }
-    })
+    }
 
-    let inputCity = $state("")
-
-    function cleanedCity(given) {
-        let rtn = "";
-        for (let i = 0; i < given.length-1; i++) {
-            if (given.substring(i, i+1) == " ") {
-                rtn += "-";
-            }
-            else {
-                rtn += given.substring(i, i+1);
-            }
+    function handleKeydown(event, index) {
+        if (event.key === 'Backspace' && !digits[index] && index > 0) {
+            inputElements[index - 1].focus();
         }
-        rtn += given.substring(given.length-1);
-        return rtn;
+    }
+
+    function handleSubmit(event) {
+        event.preventDefault();
+        const code = digits.join('');
+        console.log("Submitted code:", code);
+        // Handle code verification logic here
     }
 </script>
+
+<svelte:head>
+    <title>Jumbotron - {userType ? (userType === 'organizer' ? 'Organizer Sign-In' : 'Participant Sign-In') : 'Welcome'}</title>
+</svelte:head>
+
+<svelte:window bind:innerWidth={widthVar}></svelte:window>
+
 <style>
-    * {
-        margin-left: 30px;
-        margin-right: 30px;
-    }
     a {
-        margin: 0;
+        color: rgb(255, 223, 223);
     }
-    div {
-        background-color: rgb(214, 214, 214);
-        border: 6px solid grey;
-        padding: 20px;
-        margin: 20px;
-        border-radius: 20px;
-        h3 {
-            margin-top: 20px;
-        }
-        h4 {
-            margin-top: 10px;
-            margin-bottom: 20px;
-        }
-        button {
-            margin: 8px;
-            border-radius: 15px;
-            padding: 10px; 
-        }
+    #background {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+        z-index: 0;
+        user-select: none;
+        -webkit-user-drag: none;
+        -moz-user-drag: none;
     }
 
-    #participant {
-        position: absolute;
+    #leftTree {
+        z-index: 1;
+        position: fixed;
+        height: 100%;
+        top: 0;
+        left: 0;
+        object-fit: cover;
+        margin: 0 !important; 
+        padding: 0;
+    }
+
+    #rightTree {
+        object-fit: cover;
+        z-index: 0;
+        position: fixed;
+        height: 100%;
+        top: 0;
+        right: 0;
+        margin: 0 !important; 
+        padding: 0;
+    }
+
+    #pudding {
+        z-index: 1000;
+        position: fixed;
+        bottom: 0;
+        transform: translate(-50%, 0%);
+        left: 50%;
+        height: 100px;
+        opacity: 0;
+    }
+
+    #header {
+        position: relative;
+        z-index: 2;
+    }
+
+    #header::after {
+        content: "";
+        position: fixed;
         top: 0;
         right: 0;
         left: 0;
-        padding: 0;
-        border-radius: 0px;
+        height: 100%;
+        background-color: rgba(33, 2, 2, 0.475);
+        z-index: -1;
+        border-bottom: 8px solid rgb(246, 176, 106);
+    }
+
+    #spotlight {
+        margin-top: 80px;
+        z-index: 1000;
+        position: relative;
+        display: flex;
+        justify-content: center;
+        color: white;
+        font-family: Darumadrop One;
+    }
+
+    #spotlight button,
+    #spotlight .btn-link {
+        font-family: Atkinson Hyperlegible, Montserrat;
+        cursor: pointer;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
         border: none;
+        background-color: rgb(246, 176, 106);
+        color: #431d22;
+        font-weight: bold;
+        text-decoration: none;
+        display: inline-block;
+        transition: transform 0.125s ease-in-out, box-shadow 0.125s ease-in-out;
+    }
+
+     .btn-link:focus,
+     .btn-link:hover {
+        box-shadow: var(--shadow-elevated);
+        transform: scale(1.0625);
+    }
+
+    #spotlight button.secondary {
+        background-color: rgba(245, 245, 245, 0.05);
+        color: white;
+        border: 2px solid white;
+        margin-top: 1rem;
+    }
+
+    .form-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    fieldset {
+        border: none;
+        padding: 0;
         margin: 0;
-        background-color: rgb(212, 209, 209);
-        p {
-            color: rgb(0, 0, 0);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    legend {
+        font-size: 30px;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+    }
+
+    .button-group {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-direction: column;
+    }
+    @media (min-width: 800px) {
+        .button-group {
+            flex-direction: row;
+        }
+        #pudding {
+            opacity: 1;
         }
     }
-</style>
-<svelte:head>
-    <title>Jumbotron</title>
-</svelte:head>
-<div id="participant">
-    <p>If you've found this page as a participant, you probably made a mistake. Please see an organizer!</p>
-</div>
-<a href="/" style:text-decoration="none" title="Main page"><h1 style:font-size=40px style:margin-top=100px><image style="max-height:40px; margin: 0; margin-right: -15px; margin-left: 15px;  transform: translateY(5px); padding: 0; display:inline" src="https://assets.hackclub.com/icon-rounded.png"></image><span style:font-family="Host Grotesk" style:color="#431d22">Jumbotron</span></h1></a>
-<p><i>Keeping your event communications in one console</i></p>
-<h2 style:font-size=20px style:margin-top=20px style:margin-bottom=40px>Organizer Landing Page</h2>
-{#if liveshareError == null}
-<div>
-    <h3>Event Name</h3>
-    {#if isValid == true}
-    <h4>Your event is currently configured for {proccessCity(city)}</h4>
-    {:else if isValid == null}
-    <p>Loading...</p>
-    {:else}
-    <h4>You currently have no event configured. Your provided name may not have been in an accepted format.<br>Please use the link provided from <a style:color="black" href={refConsole[1]}>{refConsole[0]}</a> for Jumbotron</h4>
-    <form onsubmit={() => {window.location.href = base + "/?eventName=" + cleanedCity(inputCity)}}>
-        <p>You can also try to search for your event by entering the name</p>
-        <input bind:value={inputCity} placeholder="ie. leafyland" type="text">
-    </form>
-    {/if}
-</div>
-{/if}
-{#if isValid == true || liveshareError != null}
-<div transition:slide>
-    {#if liveshareError == null}
-    <h3>Login with Hack Club OAuth</h3>
-    <p>Logging in is optional; however, Liveshare functionality for your event will not work</p>
 
-    <svg style="display: block; margin: 0 auto;" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="profile" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="100" height="100"><path d="M25.698,22.196c0.248,-1.511 0.302,-3.475 0.302,-6.196c0,-2.721 -0.053,-4.685 -0.302,-6.196c-0.235,-1.45 -0.6,-2.127 -0.987,-2.515c-0.388,-0.387 -1.065,-0.752 -2.515,-0.987c-1.511,-0.249 -3.475,-0.302 -6.196,-0.302c-2.721,0 -4.685,0.053 -6.196,0.302c-1.45,0.235 -2.127,0.6 -2.515,0.987c-0.387,0.388 -0.752,1.065 -0.987,2.515c-0.249,1.511 -0.302,3.475 -0.302,6.196c0,2.721 0.053,4.685 0.302,6.196c0.235,1.45 0.6,2.127 0.987,2.515c0.388,0.387 1.065,0.752 2.515,0.987c1.511,0.249 3.475,0.302 6.196,0.302c2.721,0 4.685,-0.053 6.196,-0.302c1.45,-0.235 2.127,-0.6 2.515,-0.987c0.387,-0.388 0.752,-1.065 0.987,-2.515Zm-9.698,5.804c11,0 12,-1 12,-12c0,-11 -1,-12 -12,-12c-11,0 -12,1 -12,12c0,11 1,12 12,12Z"/><path d="M19,14c0,1.683 -0.271,2.241 -0.469,2.456c-0.163,0.176 -0.68,0.544 -2.531,0.544c-1.85,0 -2.367,-0.368 -2.53,-0.544c-0.198,-0.215 -0.47,-0.773 -0.47,-2.456c0,-1.657 1.343,-3 3,-3c1.657,0 3,1.343 3,3Zm0.835,3.977c0.879,-0.804 1.165,-2.104 1.165,-3.977c0,-2.761 -2.238,-5 -5,-5c-2.761,0 -5,2.239 -5,5c0,1.873 0.287,3.173 1.166,3.977c-1.665,0.911 -2.97,2.396 -3.649,4.189c-0.124,0.328 -0.154,0.708 0.051,0.993c0.569,0.789 1.674,-0.111 2.13,-0.97c1.008,-1.897 3.004,-3.189 5.302,-3.189c2.298,0 4.295,1.292 5.303,3.189c0.456,0.859 1.561,1.759 2.129,0.97c0.205,-0.285 0.176,-0.665 0.052,-0.993c-0.68,-1.793 -1.985,-3.278 -3.649,-4.189Z"/></svg>
-    <p><button onclick={() => {sessionStorage.setItem("refAuthCity", proccessCity(city)); window.location.href = "https://auth.hackclub.com/oauth/authorize?client_id=e86d4d7eec9c546e6c4700388d4fea7f&redirect_uri=https%3A%2F%2Fjumbotron.hackclub.com%2F&response_type=code&scope=email+verification_status"}}>Continue with HCA <svg style="max-height: 30px; max-width: 30px; margin: 2px; margin-top: 0px; margin-right: 0px; padding: 0px;" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="view-forward" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="256" height="256"><path d="M12.982,23.89c-0.354,-0.424 -0.296,-1.055 0.128,-1.408c1.645,-1.377 5.465,-4.762 6.774,-6.482c-1.331,-1.749 -5.1,-5.085 -6.774,-6.482c-0.424,-0.353 -0.482,-0.984 -0.128,-1.408c0.353,-0.425 0.984,-0.482 1.409,-0.128c1.839,1.532 5.799,4.993 7.2,6.964c0.219,0.312 0.409,0.664 0.409,1.054c0,0.39 -0.19,0.742 -0.409,1.053c-1.373,1.932 -5.399,5.462 -7.2,6.964l-0.001,0.001c-0.424,0.354 -1.055,0.296 -1.408,-0.128Z"/></svg></button></p>
-    <p><a href="{base}/{city}/control/" style:color="black">Proceed without logging in</a></p>
-    {:else}
-    <h3>Continue without Liveshare</h3>
-    <h4>Liveshare has had the following issue. You can continue without logging in</h4>
-    <p>{liveshareError}</p>
-    <p><a href="{base}/{cityToLink(city)}/control/" style:color="black">Continue without OAuth</a></p>
+    button span.material-symbols-outlined {
+        vertical-align: middle;
+    }
+
+    /* Styles for the 4-digit OTP box inputs */
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .boxes-container {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .boxes-container input {
+        width: 3rem;
+        height: 3.5rem;
+        font-size: 1.5rem;
+        text-align: center;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        background-color: rgb(255, 255, 255);
+        color: #333;
+    }
+
+    .boxes-container input:focus {
+        outline: 2px solid rgb(246, 176, 106);
+        border-color: transparent;
+    }
+</style>
+
+<!-- Decorative background graphics are hidden from screen readers -->
+<img src={resolve("/images/haven/background.webp")} alt="" aria-hidden="true" id="background"/>
+<img src={resolve("/images/haven/treeLeft.webp")} alt="" aria-hidden="true" id="leftTree" />
+<img src={resolve("/images/haven/treeRight.webp")} alt="" aria-hidden="true" id="rightTree" />
+<img src={resolve("/images/haven/smol-pud.webp")} alt="" aria-hidden="true" id="pudding" />
+
+<header id="header">
+    <h1 style:user-select="none" style:font-size="40px" style:margin-top="45px">
+        <img 
+            style="max-height:40px; margin-left: 5px; margin-right: 5px; transform: translateY(5px); padding: 0; display:inline" 
+            src="https://assets.hackclub.com/icon-rounded.png" 
+            alt="" 
+        />
+        <span style:font-family="Host Grotesk" style:color="white">Jumbotron</span>
+    </h1>
+</header>
+
+<main id="spotlight">
+    {#if userType === null}
+        <!-- Initial Selection Prompt -->
+        <div class="form-container" role="region" aria-label="User Type Selection">
+            <form aria-labelledby="form-heading" onsubmit={() => {event.preventDefault}}>
+                <fieldset>
+                    <legend id="form-heading">Welcome! Are you a {eventName} attendee?</legend>
+                    <div class="button-group">
+                        <button type="button" onclick={() => selectUserType('attendee')}>
+                            Yes, I'm an attendee
+                        </button>
+                        <button type="button" onclick={() => selectUserType('organizer')}>
+                            No, I'm an organizer
+                        </button> 
+                    </div>
+                </fieldset>
+            </form>
+        </div>
+
+    {:else if userType === 'organizer'}
+        <!-- Organizer Form View -->
+        <div in:slide class="form-container" role="region" aria-label="Organizer Sign-In Form">
+            <form aria-labelledby="org-heading" onsubmit={event.preventDefault}>
+                <fieldset>
+                    <legend id="org-heading">Organizers are required to log in through <a href="https://auth.hackclub.com" target="_blank" rel="noreferrer">Hack Club Auth</a></legend>
+                    <p style:margin-top="0px" style:color="white">Your account must be verified and YSWS-eligible to use this tool.</p>
+                    <svg style="display: block; margin: 0 auto" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="admin" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="100" height="100"><path d="M21.437 17.023a1 1 0 0 1 .785.977v2.2H23a1 1 0 0 1 .907 1.42l-2.222 4.8a1 1 0 0 1-1.907-.42v-2.2H19a1 1 0 0 1-.907-1.42l2.222-4.8a1 1 0 0 1 1.122-.557zM19.834 16.977C20.714 16.173 21 14.873 21 13a5 5 0 0 0-10 0c0 1.873.286 3.173 1.165 3.977a8.029 8.029 0 0 0-3.6 4.062c-.162.408-.213.939.162 1.168.792.485 1.632-.457 2.105-1.257a5.997 5.997 0 0 1 5.48-2.942c1.132.058 2.373-.055 3.24-.784a8.75 8.75 0 0 0 .282-.247zM19 13c0 1.683-.271 2.241-.47 2.456-.162.176-.68.544-2.53.544-1.85 0-2.368-.368-2.53-.544C13.27 15.24 13 14.683 13 13a3 3 0 1 1 6 0z"/></svg>
+                    <a 
+                        class="btn-link"
+                        style="margin-bottom: 50px; margin-top: 20px;"
+                        href="https://auth.hackclub.com/oauth/authorize?client_id=e86d4d7eec9c546e6c4700388d4fea7f&redirect_uri=https%3A%2F%2Fsymmetrical-doodle-69qgr7v97j76f59j7-5173.app.github.dev%2Fcallback&response_type=code&scope=name+verification_status+slack_id"
+                    >
+                        Continue
+                    </a>
+                </fieldset>
+            </form>
+                <button type="button" class="secondary" onclick={resetSelection}><span class="material-symbols-outlined" translate="no">undo</span> Back to selection</button>
+        </div>
+
+    {:else if userType === 'attendee'}
+        <div in:slide class="form-container" role="region" aria-label="Participant Check-In Form">
+            <form aria-labelledby="attendee-heading" onsubmit={handleSubmit}>
+                <fieldset>
+                    <legend id="attendee-heading">Please enter the code provided by your event</legend>
+                    
+                    <!-- Accessible 4-Digit Code Box Input Group -->
+                    <div class="boxes-container">
+                        {#each digits as digit, index}
+                            <input
+                                bind:this={inputElements[index]}
+                                bind:value={digits[index]}
+                                type="text"
+                                inputmode="numeric"
+                                maxlength="1"
+                                pattern="[0-9]*"
+                                aria-label="Digit {index + 1} of 4"
+                                oninput={(e) => handleInput(e, index)}
+                                onkeydown={(e) => handleKeydown(e, index)}
+                            />
+                        {/each}
+                    </div>
+
+                    <div class="button-group">
+                        <button style="margin-bottom: 50px; margin-top: 20px;" type="submit">Continue</button>
+                    </div>
+                </fieldset>
+            </form>
+            <button type="button" class="secondary" onclick={resetSelection}><span class="material-symbols-outlined" translate="no">undo</span> Back to selection</button>
+        </div>
     {/if}
-</div>
-{/if}
+</main>
