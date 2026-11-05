@@ -1,5 +1,8 @@
 export const internal = $state({
     initComplete: false,
+    code: null,
+    slack: null,
+    name: null,
     cityName: ""
 })
 

@@ -8,7 +8,7 @@ const config = {
 		}),
 		paths: {
 			// GitHub Pages lives at /jumbotron; Vercel serves the project at the domain root
-			base: process.env.VERCEL ? '' : '/jumbotron'
+			base: process.env.VERCEL ? '' : ''
 		}
 	}
 };

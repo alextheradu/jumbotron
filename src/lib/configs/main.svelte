@@ -11,9 +11,8 @@
     import { sync } from "$lib/sync.svelte.js";
     import { tutorial } from "$lib/sync.svelte.js";
 
-    let code = $state("0967");
     function codeToLink() {
-        return `jumbotron.hackclub.com/?code=${code}`
+        return `jumbotron.hackclub.com/?code=${internal.code}`
     }
 
     let cityName = $state("");
@@ -44,21 +43,22 @@
         internal.cityName = cityName;
         internal.initComplete = true;
 
-        await fetch("https://api.jumbotron.hackclub.com/initEvent", {
+        const response = await fetch("https://api.jumbotron.hackclub.com/initEvent", {
             method: "POST",
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                "slack": "U8889",
-                "token": "9990",
+                "slack": internal.slack,
+                "password": internal.password,
                 "cityName": cityName
             })
         })
+        const data = await response.json();
+        console.log(data);
+        localStorage.setItem("cityName", cityName);
     }
     function resetInit() {
-        cityName = "";
-        internal.cityName = "";
         internal.initComplete = false;
     }
 
@@ -109,14 +109,14 @@
         background-color: #ec374ff2;
     }
 </style>
-<h4 id="code">{code}</h4>
-<h4><span translate="no">{codeToLink()}</span> <button onclick={() => {navigator.clipboard.writeText(codeToLink())}} id="copyButton">Copy Link</button></h4>
-<p style="margin-left: 40px; margin-right: 40px;">This is the four-digit code that event participants can use on <a href="https://jumbotron.hackclub.com">the main page</a>. Participants can additionally use the provided link directly. It is specific to you as an organizer, not your event, and is assigned to you for the entirety of {eventName}.</p>
+<h4 id="code">{internal.code}</h4>
+<h4><span style:font-family="Atkinson Hyperlegible Mono, Montserrat" translate="no">{codeToLink()}</span> <button onclick={() => {navigator.clipboard.writeText(codeToLink())}} id="copyButton">Copy Link</button></h4>
+<p style="margin-left: 40px; margin-right: 40px;">This is the four-digit code that event participants can use on <a href="https://jumbotron.hackclub.com">the main page</a>. Participants can additionally use the provided link directly. <strong>It is specific to you as an organizer, not your event, and is assigned to you for the entirety of {eventName}.</strong></p>
 {#if !internal.initComplete}
 <form transition:slide style:margin-top=50px onsubmit={() => {event.preventDefault(); initializeEvent();}}>
     <input required="true" aria-required="true" bind:value={cityName} type="text" aria-placeholder="Enter city or location name" placeholder="*Enter city or location name" autocapitalize="words">
-    {#if cityName.length != 0}<p>Your event is referred to as <u><strong>{eventName} {cityName}</strong></u></p>
-    <input type="radio" id="coc" required="true">
+    {#if cityName.length != 0}<p>Your event is referred to as <u><strong translate="no">{eventName} {cityName}</strong></u></p>
+    <p style:font-family="Atkinson Hyperlegible Mono, Montserrat">Please ensure correct formatting. This will be visible to participants.</p>
     <input type=submit value="Continue">
     {:else}<p>Your event is referred to as {eventName}...</p>
     {/if}

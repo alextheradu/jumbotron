@@ -7,6 +7,13 @@
 
     import { slide } from "svelte/transition";
 
+    onMount(() => {
+        if (localStorage.getItem("creds")) {
+            window.location.href = resolve("/staff");
+            return;
+        }
+    })
+
     // State to track which view/form is active: null, 'organizer', or 'attendee'
     let userType = $state(null); 
 
@@ -201,7 +208,7 @@
         vertical-align: middle;
     }
 
-    /* Styles for the 4-digit OTP box inputs */
+    /* Styles for the 4-digit OTP box inputs 
     .sr-only {
         position: absolute;
         width: 1px;
@@ -212,7 +219,7 @@
         clip: rect(0, 0, 0, 0);
         white-space: nowrap;
         border: 0;
-    }
+    }*/
 
     .boxes-container {
         display: flex;
