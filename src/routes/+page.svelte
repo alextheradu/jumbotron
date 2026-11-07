@@ -7,12 +7,26 @@
 
     import { slide } from "svelte/transition";
 
+    let showRedirectWarning = $state(false);
+    let redirectTimer = $state(null);
+
     onMount(() => {
         if (localStorage.getItem("creds")) {
-            window.location.href = resolve("/staff");
-            return;
+            showRedirectWarning = true;
+            // Give them 4 seconds to cancel, or automatically redirect
+            redirectTimer = setTimeout(() => {
+                window.location.replace(resolve("/staff"));
+            }, 5000);
         }
-    })
+    });
+
+    function cancelRedirect() {
+        if (redirectTimer) {
+            clearTimeout(redirectTimer);
+            redirectTimer = null;
+        }
+        showRedirectWarning = false;
+    }
 
     // State to track which view/form is active: null, 'organizer', or 'attendee'
     let userType = $state(null); 
@@ -64,6 +78,35 @@
 <svelte:window bind:innerWidth={widthVar}></svelte:window>
 
 <style>
+    /* Added styles for the redirect warning banner */
+    .redirect-banner {
+        background-color: rgba(180, 50, 50, 0.623);
+        border: 4px solid rgb(246, 176, 106);
+        border-radius: 20px;
+        font-weight: 600;
+        color: white;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        font-family: Atkinson Hyperlegible, Montserrat;
+        max-width: 400px;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .redirect-banner button {
+        background-color: white;
+        color: #431d22;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-weight: bold;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
     a {
         color: rgb(255, 223, 223);
     }
@@ -134,9 +177,11 @@
         z-index: 1000;
         position: relative;
         display: flex;
+        flex-direction: column;
+        align-items: center;
         justify-content: center;
         color: white;
-        font-family: Darumadrop One;
+        font-family: Darumadrop One, Montserrat;
     }
 
     #spotlight button,
@@ -208,19 +253,6 @@
         vertical-align: middle;
     }
 
-    /* Styles for the 4-digit OTP box inputs 
-    .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-    }*/
-
     .boxes-container {
         display: flex;
         gap: 0.75rem;
@@ -258,11 +290,29 @@
             src="https://assets.hackclub.com/icon-rounded.png" 
             alt="" 
         />
-        <span style:font-family="Host Grotesk" style:color="white">Jumbotron</span>
+        <span style:font-family="Host Grotesk, Montserrat" style:color="white">Jumbotron</span>
     </h1>
 </header>
 
 <main id="spotlight">
+    {#if showRedirectWarning}
+        <div 
+            class="redirect-banner" 
+            transition:slide 
+            role="alert" 
+            aria-live="assertive"
+        >
+            <span>You are about to be redirected to the staff dashboard based on saved credentials.</span>
+            <button 
+                type="button" 
+                onclick={cancelRedirect} 
+                aria-label="Cancel automatic redirect to staff dashboard"
+            >
+                Cancel Redirect
+            </button>
+        </div>
+    {/if}
+
     {#if userType === null}
         <!-- Initial Selection Prompt -->
         <div class="form-container" role="region" aria-label="User Type Selection">

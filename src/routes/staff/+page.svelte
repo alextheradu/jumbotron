@@ -3,6 +3,7 @@
     import { page } from "$app/state";
     import { onMount } from "svelte";
     import { eventName } from "$lib/event";
+    import { liveshareData, sync } from "$lib/liveshare.svelte";
 
     import { slide } from "svelte/transition";
 
@@ -27,17 +28,33 @@
                 internal.initComplete = true;
             }
             else {
-                const response = await fetch(`https://api.jumbotron.hackclub.com/getLocation?code=${internal.code}`)
+                const response = await fetch(`https://api.jumbotron.hackclub.com/getPacket?code=${internal.code}`)
                 if (!response.ok) {
                     return;
                 }
                 let data = await response.json();
-                if (!data.name || data.name == "None" || data.name.trim() == "") {
+                if (!data.cityName || data.cityName.trim() == "") {
                     return;
                 }
                 else {
-                    internal.cityName = data.name;
+                    internal.cityName = data.cityName;
                     internal.initComplete = true;
+
+                    let syncedData = await JSON.parse(data.data);
+
+                    if (syncedData) { // inside data means liveshareData
+                        liveshareData.announcement = syncedData.announcement;
+                        liveshareData.event = syncedData.event;
+                        liveshareData.file = syncedData.file;
+                        liveshareData.youtube = syncedData.youtube;
+                        liveshareData.website = syncedData.website;
+                        console.log("Liveshare synced from", syncedData);
+                        internal.importedSync = true;
+                    } 
+                    else {
+                        console.log("No liveshare data synced");
+                    }
+
                 }
             }
         }
@@ -46,6 +63,7 @@
             return;
         }
     })
+
     
     // Static placeholder constants
     const liveshareEnabled = false;
@@ -228,7 +246,7 @@
         position: absolute;
         top: 10px;
         left: 15px;
-        font-family: Atkinson Hyperlegible Mono;
+        font-family: Atkinson Hyperlegible Mono, Montserrat;
 
         span {
             font-weight: 900;
@@ -244,14 +262,14 @@
             src="https://assets.hackclub.com/icon-rounded.png" 
             alt="" 
         />
-        <span style:font-family="Host Grotesk" style:color="black">Jumbotron</span>
+        <span style:font-family="Host Grotesk, Montserrat" style:color="black">Jumbotron</span>
     </h1>
     <h2 style:margin-top=3px style:font-size=20px>{eventName} Organizer Console</h2>
 </header>
-<div id="name">Logged in as <br><span>{(internal.name)}</span></div>
+<div id="name">Logged in as <br><span>{@html (internal.name)}</span></div>
 <!--<svg style="display: block; margin: 0 auto" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="admin" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="100" height="100"><path d="M21.437 17.023a1 1 0 0 1 .785.977v2.2H23a1 1 0 0 1 .907 1.42l-2.222 4.8a1 1 0 0 1-1.907-.42v-2.2H19a1 1 0 0 1-.907-1.42l2.222-4.8a1 1 0 0 1 1.122-.557zM19.834 16.977C20.714 16.173 21 14.873 21 13a5 5 0 0 0-10 0c0 1.873.286 3.173 1.165 3.977a8.029 8.029 0 0 0-3.6 4.062c-.162.408-.213.939.162 1.168.792.485 1.632-.457 2.105-1.257a5.997 5.997 0 0 1 5.48-2.942c1.132.058 2.373-.055 3.24-.784a8.75 8.75 0 0 0 .282-.247zM19 13c0 1.683-.271 2.241-.47 2.456-.162.176-.68.544-2.53.544-1.85 0-2.368-.368-2.53-.544C13.27 15.24 13 14.683 13 13a3 3 0 1 1 6 0z"/></svg>-->
 <img id="pfp" class:loaded={pfpLoaded} onload={() => {pfpLoaded = true}} src="https://cachet.hackclub.com/users/{internal.slack}/r" alt="Profile" />
-<p style:margin-bottom=40px><button onclick={() => {localStorage.removeItem("creds"); localStorage.removeItem("cityName"); window.location.href = base + "/"}}>
+<p style:margin-bottom=40px><button onclick={() => {localStorage.removeItem("creds"); localStorage.removeItem("cityName"); window.location.replace("/")}}>
     <svg style="display: block; margin: 0 auto;" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="view-back" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="30" height="30"><path d="M19.768,23.89c0.354,-0.424 0.296,-1.055 -0.128,-1.408c-1.645,-1.377 -5.465,-4.762 -6.774,-6.482c1.331,-1.749 5.1,-5.085 6.774,-6.482c0.424,-0.353 0.482,-0.984 0.128,-1.408c-0.353,-0.425 -0.984,-0.482 -1.409,-0.128c-1.839,1.532 -5.799,4.993 -7.2,6.964c-0.219,0.312 -0.409,0.664 -0.409,1.054c0,0.39 0.19,0.742 0.409,1.053c1.373,1.932 5.399,5.462 7.2,6.964l0.001,0.001c0.424,0.354 1.055,0.296 1.408,-0.128Z"/></svg>
     Sign out
 </button></p>
@@ -270,7 +288,7 @@
 </div>
 <div transition:slide id="presentations" class="config">
     <h3>Presentations</h3>
-    <p>Display slides, documents, and videos</p>
+    <p>Display slides and documents, videos, and websites</p>
     <Slides />
 </div>
 {:else}
@@ -282,6 +300,6 @@
     <p style:color="white"><strong><span translate="no" class="material-symbols-outlined">podcasts</span></strong></p>
 </div>
 
-<div id="syncingNotif" class:active={isSyncActive}>
+<div id="syncingNotif" class:active={sync.slides || sync.announcements}>
     <p style:color="white"><strong><span translate="no" class="material-symbols-outlined">sync</span></strong></p>
 </div>

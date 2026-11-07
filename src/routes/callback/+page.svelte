@@ -29,13 +29,13 @@
         })
         if (!raw.ok) {
             alert("Server error, try again soon!");
-            window.location.href = resolve("/");
+            window.location.replace(resolve("/"));
             return;
         }
         let data = await raw.json();
         let creds = data.credentials;
         localStorage.setItem("creds", creds);
-        window.location.href = resolve("/staff");
+        window.location.replace(resolve("/staff"));
         return;
         
     })
@@ -50,8 +50,8 @@
             src="https://assets.hackclub.com/icon-rounded.png" 
             alt="" 
         />
-        <span style:font-family="Host Grotesk" style:color="black">Jumbotron</span>
+        <span style:font-family="Host Grotesk, Montserrat" style:color="black">Jumbotron</span>
     </h1>
     <h2 style:margin-top=3px style:font-size=20px>{eventName} Organizer Console</h2>
 </header>
-<p>Loading...</p>
+<p>You will be automatically redirected</p>

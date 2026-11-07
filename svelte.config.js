@@ -7,8 +7,7 @@ const config = {
 			fallback: '404.html'
 		}),
 		paths: {
-			// GitHub Pages lives at /jumbotron; Vercel serves the project at the domain root
-			base: process.env.VERCEL ? '' : ''
+			base: ''
 		}
 	}
 };

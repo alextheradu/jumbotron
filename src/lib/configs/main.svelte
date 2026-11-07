@@ -6,37 +6,13 @@
     import { slide } from "svelte/transition";
 
     import { eventName } from "$lib/event";
-    import { internal } from "$lib/liveshare.svelte";
-
-    import { sync } from "$lib/sync.svelte.js";
-    import { tutorial } from "$lib/sync.svelte.js";
+    import { internal, liveshareData, updateAPI, sync } from "$lib/liveshare.svelte";
 
     function codeToLink() {
         return `jumbotron.hackclub.com/?code=${internal.code}`
     }
 
     let cityName = $state("");
-
-    onMount(function() {
-        localStorage.setItem("jumbotron.error", "");
-       setTimeout(function() {localStorage.setItem("jumbotron.sync", true)}, 1000);
-       setTimeout(function() {localStorage.setItem("jumbotron.sync", false);}, 2000);
-    })
-
-    function openDisplay() {
-        window.open(base + "/" + page.params.city + "/display", "_blank");
-        setTimeout(function() {localStorage.setItem("jumbotron.sync", true);}, 2000);
-       setTimeout(function() {localStorage.setItem("jumbotron.sync", false);}, 3000);
-    }
-    function syncDisplay() {
-        sync.enabled = true;
-        document.getElementById("sync").disabled = true;
-        setTimeout(function() {localStorage.setItem("jumbotron.sync", true)}, 2000)
-        setTimeout(function() {sync.enabled = false; document.getElementById("sync").disabled = false; localStorage.setItem("jumbotron.sync", false)}, 3000)
-    }
-    function fullscreen() {
-        document.documentElement.requestFullscreen();
-    }
 
     async function initializeEvent() {
         cityName = cityName.substring(0, 1).toLocaleUpperCase() + cityName.substring(1);
@@ -49,7 +25,7 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                "slack": internal.slack,
+                "code": internal.code,
                 "password": internal.password,
                 "cityName": cityName
             })
@@ -110,12 +86,12 @@
     }
 </style>
 <h4 id="code">{internal.code}</h4>
-<h4><span style:font-family="Atkinson Hyperlegible Mono, Montserrat" translate="no">{codeToLink()}</span> <button onclick={() => {navigator.clipboard.writeText(codeToLink())}} id="copyButton">Copy Link</button></h4>
+<h4><span style:font-family="Atkinson Hyperlegible Mono, Montserrat" translate="no">{codeToLink()}</span> {#if internal.code != null}<button transition:slide onclick={() => {navigator.clipboard.writeText(codeToLink())}} id="copyButton">Copy Link</button>{/if}</h4>
 <p style="margin-left: 40px; margin-right: 40px;">This is the four-digit code that event participants can use on <a href="https://jumbotron.hackclub.com">the main page</a>. Participants can additionally use the provided link directly. <strong>It is specific to you as an organizer, not your event, and is assigned to you for the entirety of {eventName}.</strong></p>
 {#if !internal.initComplete}
 <form transition:slide style:margin-top=50px onsubmit={() => {event.preventDefault(); initializeEvent();}}>
     <input required="true" aria-required="true" bind:value={cityName} type="text" aria-placeholder="Enter city or location name" placeholder="*Enter city or location name" autocapitalize="words">
-    {#if cityName.length != 0}<p>Your event is referred to as <u><strong translate="no">{eventName} {cityName}</strong></u></p>
+    {#if cityName.length != 0}<p>Your event is referred to as {" "}<u translate="no"><strong>{eventName} {cityName}</strong></u></p>
     <p style:font-family="Atkinson Hyperlegible Mono, Montserrat">Please ensure correct formatting. This will be visible to participants.</p>
     <input type=submit value="Continue">
     {:else}<p>Your event is referred to as {eventName}...</p>
