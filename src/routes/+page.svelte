@@ -2,23 +2,59 @@
     import { resolve } from "$app/paths";
     import { page } from "$app/state";
     import { onMount } from "svelte";
-
     import { eventName } from "$lib/event";
-
-    import { slide } from "svelte/transition";
+    import { fly, slide } from "svelte/transition";
 
     let showRedirectWarning = $state(false);
+    let redirectReason = $state("");
     let redirectTimer = $state(null);
 
-    onMount(() => {
-        if (localStorage.getItem("creds")) {
+    let attendeeError = $state(null);
+
+    onMount(async () => {
+        let code = page.url.searchParams.get("code");
+        if (code) {
+            const response = await getPacket(code);
+            if (response === false) {
+                selectUserType("attendee");
+                attendeeError = "This link is for an event that does not exist. Please enter the correct code below, or ask an organizer.";
+            } else {
+                sessionStorage.setItem("eventCode", code);
+                redirectReason = "Redirecting based on the event code provided in your link.";
+                showRedirectWarning = true;
+                redirectTimer = setTimeout(() => {
+                    window.location.href = resolve(`/attendee`);
+                }, 5000);
+            }
+        } else if (localStorage.getItem("creds")) {
+            redirectReason = "Redirecting based on your saved staff credentials.";
             showRedirectWarning = true;
-            // Give them 4 seconds to cancel, or automatically redirect
             redirectTimer = setTimeout(() => {
-                window.location.replace(resolve("/staff"));
+                window.location.href = resolve("/staff");
             }, 5000);
         }
     });
+
+    async function getPacket(code) {
+        try {
+            const response = await fetch(`https://api.jumbotron.hackclub.com/getPacket?code=${code}`);
+            const data = await response.json();
+
+            if (!response.ok || data.error) {
+                if (attendeeError == null) {
+                    attendeeError = "No event was found under this code. Make sure you've entered it correctly, or ask an organizer.";
+                }
+                return false;
+            }
+
+            sessionStorage.setItem("eventPacket", JSON.stringify(data));
+            sessionStorage.setItem("eventCode", code);
+            return true;
+        } catch (err) {
+            attendeeError = "Failed to connect to the server. Please try again.";
+            return false;
+        }
+    }
 
     function cancelRedirect() {
         if (redirectTimer) {
@@ -26,6 +62,7 @@
             redirectTimer = null;
         }
         showRedirectWarning = false;
+        redirectReason = "";
     }
 
     // State to track which view/form is active: null, 'organizer', or 'attendee'
@@ -33,10 +70,12 @@
 
     function selectUserType(type) {
         userType = type;
+        attendeeError = null; // Clear error when switching views
     }
 
     function resetSelection() {
         userType = null;
+        attendeeError = null;
     }
 
     let widthVar = $state();
@@ -44,6 +83,17 @@
     // State for the 4-digit code inputs
     let digits = $state(['', '', '', '']);
     let inputElements = [];
+
+    // Function to ensure the code is turned into a single string
+    function getFullCode(input) {
+        if (Array.isArray(input)) {
+            return input.join('');
+        }
+        return String(input);
+    }
+
+    // Check if all 4 digits are filled out
+    let isCodeComplete = $derived(digits.every(digit => digit !== ''));
 
     function handleInput(event, index) {
         const value = event.target.value;
@@ -63,11 +113,18 @@
         }
     }
 
-    function handleSubmit(event) {
+    async function handleSubmit(event) {
         event.preventDefault();
-        const code = digits.join('');
-        console.log("Submitted code:", code);
-        // Handle code verification logic here
+        const code = getFullCode(digits);
+        attendeeError = null; 
+        let success = await getPacket(code);
+        if (success) {
+            redirectReason = "Redirecting based on your successfully verified event code.";
+            showRedirectWarning = true;
+            redirectTimer = setTimeout(() => {
+                window.location.href = resolve("/attendee");
+            }, 5000);
+        }
     }
 </script>
 
@@ -78,7 +135,6 @@
 <svelte:window bind:innerWidth={widthVar}></svelte:window>
 
 <style>
-    /* Added styles for the redirect warning banner */
     .redirect-banner {
         background-color: rgba(180, 50, 50, 0.623);
         border: 4px solid rgb(246, 176, 106);
@@ -277,11 +333,11 @@
     }
 </style>
 
-<!-- Decorative background graphics are hidden from screen readers -->
+<!-- Background -->
 <img src={resolve("/images/haven/background.webp")} alt="" aria-hidden="true" id="background"/>
 <img src={resolve("/images/haven/treeLeft.webp")} alt="" aria-hidden="true" id="leftTree" />
 <img src={resolve("/images/haven/treeRight.webp")} alt="" aria-hidden="true" id="rightTree" />
-<img src={resolve("/images/haven/smol-pud.webp")} alt="" aria-hidden="true" id="pudding" />
+{#if !showRedirectWarning}<img out:fly={{y:100}} src={resolve("/images/haven/smol-pud.webp")} alt="" aria-hidden="true" id="pudding" />{/if}
 
 <header id="header">
     <h1 style:user-select="none" style:font-size="40px" style:margin-top="45px">
@@ -302,11 +358,14 @@
             role="alert" 
             aria-live="assertive"
         >
-            <span>You are about to be redirected to the staff dashboard based on saved credentials.</span>
+            <span>You are about to be redirected.</span>
+            {#if redirectReason}
+                <span style:font-size="0.9rem" style:opacity="0.9">{redirectReason}</span>
+            {/if}
             <button 
                 type="button" 
                 onclick={cancelRedirect} 
-                aria-label="Cancel automatic redirect to staff dashboard"
+                aria-label="Cancel automatic redirect"
             >
                 Cancel Redirect
             </button>
@@ -316,9 +375,9 @@
     {#if userType === null}
         <!-- Initial Selection Prompt -->
         <div class="form-container" role="region" aria-label="User Type Selection">
-            <form aria-labelledby="form-heading" onsubmit={() => {event.preventDefault}}>
+            <form aria-labelledby="form-heading" onsubmit={(e) => e.preventDefault()}>
                 <fieldset>
-                    <legend id="form-heading">Welcome! Are you a {eventName} attendee?</legend>
+                    <legend style:margin-left=10px style:margin-right=10px id="form-heading">Welcome! Are you a {eventName} attendee?</legend>
                     <div class="button-group">
                         <button type="button" onclick={() => selectUserType('attendee')}>
                             Yes, I'm an attendee
@@ -334,7 +393,7 @@
     {:else if userType === 'organizer'}
         <!-- Organizer Form View -->
         <div in:slide class="form-container" role="region" aria-label="Organizer Sign-In Form">
-            <form aria-labelledby="org-heading" onsubmit={event.preventDefault}>
+            <form aria-labelledby="org-heading" onsubmit={(e) => e.preventDefault()}>
                 <fieldset>
                     <legend id="org-heading">Organizers are required to log in through <a href="https://auth.hackclub.com" target="_blank" rel="noreferrer">Hack Club Auth</a></legend>
                     <p style:margin-top="0px" style:color="white">Your account must be verified and YSWS-eligible to use this tool.</p>
@@ -355,7 +414,7 @@
         <div in:slide class="form-container" role="region" aria-label="Participant Check-In Form">
             <form aria-labelledby="attendee-heading" onsubmit={handleSubmit}>
                 <fieldset>
-                    <legend id="attendee-heading">Please enter the code provided by your event</legend>
+                    <legend id="attendee-heading">{attendeeError || "Please enter the code provided by your event"}</legend>
                     
                     <!-- Accessible 4-Digit Code Box Input Group -->
                     <div class="boxes-container">
@@ -374,9 +433,11 @@
                         {/each}
                     </div>
 
-                    <div class="button-group">
-                        <button style="margin-bottom: 50px; margin-top: 20px;" type="submit">Continue</button>
-                    </div>
+                    {#if isCodeComplete}
+                        <div class="button-group" transition:slide>
+                            <button style="margin-bottom: 50px; margin-top: 20px;" type="submit">Continue</button>
+                        </div>
+                    {/if}
                 </fieldset>
             </form>
             <button type="button" class="secondary" onclick={resetSelection}><span class="material-symbols-outlined" translate="no">undo</span> Back to selection</button>

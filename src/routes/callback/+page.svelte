@@ -9,12 +9,12 @@
     
     onMount(async () => {
         if (localStorage.getItem("creds")) {
-            window.location.href = resolve("/staff");
+            window.location.replace(resolve("/staff"))
             return;
         }
 
         if (page.url.searchParams.get("code") == null) {
-            window.location.href = resolve("/");
+            window.location.replace(resolve("/"))
         }
         authCode = page.url.searchParams.get("code");
 
@@ -27,16 +27,19 @@
                 "code": authCode
             })
         })
+        
         if (!raw.ok) {
             alert("Server error, try again soon!");
             window.location.replace(resolve("/"));
             return;
         }
+            
         let data = await raw.json();
         let creds = data.credentials;
         localStorage.setItem("creds", creds);
         window.location.replace(resolve("/staff"));
         return;
+        
         
     })
 </script>

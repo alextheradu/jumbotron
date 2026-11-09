@@ -145,7 +145,7 @@
             <form> 
                 <input bind:value={fileLink} class="bigInput" type="url" placeholder="https://docs.google.com/file...">
             </form>
-            <p>Attendees will only see the preview of your file, and not any internal comments or notes.</p>
+            {#if !liveshareData.file}<p>Attendees will only see the preview of your file, and not any internal comments or notes.</p>{/if}
 
             <p>
                 <button onclick={enableFile} id="file" class:disabled={sync.slides} class:incomplete={fileLink.length == 0} disabled={sync.slides || fileLink.length == 0}>
@@ -155,6 +155,9 @@
                     <button onclick={removeFile} class:disabled={sync.slides} disabled={sync.slides} style="background-color: rgb(150, 50, 50); margin-left: 10px;">Hide File</button>
                 {/if}
             </p>
+            {#if liveshareData.file}
+                <p style:font-family="Atkinson Hyperlegible Mono">Attendees have unrestricted access to the file, and can progress through it independently.</p>
+            {/if}
         </div>
 
     {:else if consoleMode == 2}
