@@ -6,6 +6,7 @@
     let failed = $state(false);
     let cityName = $state("");
     let code = "";
+    let updateNotification = $state("");
 
     // Reactive state for all possible liveshare items
     let liveshareData = $state({
@@ -22,11 +23,36 @@
         try {
             const parsed = typeof rawPacket === "string" ? JSON.parse(rawPacket) : rawPacket;
             if (parsed) {
-                liveshareData.announcement = parsed.announcement || "";
-                liveshareData.event = parsed.event || "";
-                liveshareData.file = parsed.file || "";
-                liveshareData.youtube = parsed.youtube || "";
-                liveshareData.website = parsed.website || "";
+                // Normalize incoming fields or fallback to empty strings
+                const newAnnouncement = parsed.announcement || "";
+                const newEvent = parsed.event || "";
+                const newFile = parsed.file || "";
+                const newYoutube = parsed.youtube || "";
+                const newWebsite = parsed.website || "";
+
+                // Deep compare to check if anything in liveshareData actually changed
+                const hasChanged = 
+                    JSON.stringify(newAnnouncement) !== JSON.stringify(liveshareData.announcement) ||
+                    JSON.stringify(newEvent) !== JSON.stringify(liveshareData.event) ||
+                    JSON.stringify(newFile) !== JSON.stringify(liveshareData.file) ||
+                    JSON.stringify(newYoutube) !== JSON.stringify(liveshareData.youtube) ||
+                    JSON.stringify(newWebsite) !== JSON.stringify(liveshareData.website);
+
+                // Update reactive state
+                liveshareData.announcement = newAnnouncement;
+                liveshareData.event = newEvent;
+                liveshareData.file = newFile;
+                liveshareData.youtube = newYoutube;
+                liveshareData.website = newWebsite;
+
+                // Trigger notification ONLY if content genuinely changed
+                if (hasChanged) {
+                    updateNotification = "New information has been updated for this event.";
+
+                    setTimeout(() => {
+                        updateNotification = ""; 
+                    }, 5000);
+                }
             }
         } catch (e) {
             console.error("Failed to parse packet data:", e, rawPacket);
@@ -36,13 +62,6 @@
     onMount(() => {
         const savedPacket = sessionStorage.getItem("eventPacket");
         const savedCode = sessionStorage.getItem("eventCode");
-
-        /*
-        if (savedPacket === `{"data":null}`) {
-            failed = null;
-            return;
-        }
-        */
 
         if (!savedCode) {
             failed = true;
@@ -136,6 +155,17 @@
     header {
         text-align: center;
     }
+    .toast-banner {
+        background-color: #f4c5c5;
+        color: #3a0f0f;
+        border: 1px solid #ffeeba;
+        padding: 10px 15px;
+        border-radius: 8px;
+        text-align: center;
+        font-weight: 500;
+        margin-bottom: 10px;
+        font-family: Atkinson Hyperlegible Mono, Montserrat;
+    }
 </style>
 
 <header id="header">
@@ -143,7 +173,7 @@
         <img 
             style="max-height:40px; margin-left: 5px; margin-right: 5px; transform: translateY(5px); padding: 0; display:inline" 
             src="https://assets.hackclub.com/icon-rounded.png" 
-            alt="" 
+            alt="Hack Club Logo" 
         />
         <span style:font-family="Host Grotesk, Montserrat" style:color="black">Jumbotron</span>
     </h1>
@@ -153,8 +183,8 @@
             sessionStorage.removeItem("eventCode"); 
             sessionStorage.removeItem("eventPacket"); 
             window.location.replace("/");
-        }}>
-            <svg style="display: block; margin: 0 auto;" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="Return home icon" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="30" height="30">
+        }} aria-label="Return to home page">
+            <svg style="display: block; margin: 0 auto;" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="30" height="30" aria-hidden="true">
                 <path d="M19.768,23.89c0.354,-0.424 0.296,-1.055 -0.128,-1.408c-1.645,-1.377 -5.465,-4.762 -6.774,-6.482c1.331,-1.749 5.1,-5.085 6.774,-6.482c0.424,-0.353 0.482,-0.984 0.128,-1.408c-0.353,-0.425 -0.984,-0.482 -1.409,-0.128c-1.839,1.532 -5.799,4.993 -7.2,6.964c-0.219,0.312 -0.409,0.664 -0.409,1.054c0,0.39 0.19,0.742 0.409,1.053c1.373,1.932 5.399,5.462 7.2,6.964l0.001,0.001c0.424,0.354 1.055,0.296 1.408,-0.128Z"/>
             </svg>
             Return Home
@@ -167,8 +197,15 @@
 {:else if failed == null}
     <h3 role="alert" style="text-align: center;">This event isn't initialized yet, try again soon or ask an organizer.</h3>
 {:else}
-    <main id="body" aria-live="polite" aria-atomic="true" role="region" aria-label="Live event data stream">
+    <main id="body" aria-live="polite" aria-atomic="false" role="region" aria-label="Live event data stream">
         
+        <!-- Live notification banner for updates -->
+        {#if updateNotification}
+            <div class="toast-banner" role="status" aria-live="assertive">
+                {updateNotification}
+            </div>
+        {/if}
+
         <!-- Check if all fields are empty -->
         {#if !liveshareData.announcement && !liveshareData.event && !liveshareData.file && !liveshareData.youtube && !liveshareData.website}
             <div class="box empty-state" role="status">
@@ -199,9 +236,11 @@
             <section class="box" aria-label="Shared Document">
                 <h3>Shared Document or Slides</h3>
                 <p>A document is being displayed</p>
-                <p><a href={liveshareData.file} target="_blank" rel="noopener noreferrer" aria-label="Open shared file">
-                    <button>See Document or Slides</button>
-                </a></p>
+                <p>
+                    <a href={liveshareData.file} target="_blank" rel="noopener noreferrer" aria-label="Open shared file in a new tab">
+                        <button>Preview Document or Slides</button>
+                    </a>
+                </p>
             </section>
         {/if}
 
@@ -210,7 +249,11 @@
             <section class="box" aria-label="Featured Video">
                 <h3>YouTube Video</h3>
                 <p>A YouTube video is being shown</p>
-                <p><a href={liveshareData.youtube.url} target="_blank" rel="noopener noreferrer"><button>Watch Video</button></a></p>
+                <p>
+                    <a href={liveshareData.youtube.url} target="_blank" rel="noopener noreferrer" aria-label="Watch YouTube video in a new tab">
+                        <button>Watch Video</button>
+                    </a>
+                </p>
             </section>
         {/if}
 
@@ -218,9 +261,12 @@
         {#if liveshareData.website}
             <section class="box" aria-label="Shared Website">
                 <h3>Shared Website</h3>
-                <a href={liveshareData.website} target="_blank" rel="noopener noreferrer" aria-label="Open shared website link">
-                    <button>See Website</button>
-                </a>
+                <p>A website is being shown</p>
+                <p>
+                    <a href={liveshareData.website} target="_blank" rel="noopener noreferrer" aria-label="Open shared website link in a new tab">
+                        <button>See Website</button>
+                    </a>
+                </p>
             </section>
         {/if}
 

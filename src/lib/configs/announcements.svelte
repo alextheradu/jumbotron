@@ -244,15 +244,12 @@
             liveshareData.event = null;
         }
 
-        setTimeout(function() {
-            sync.liveshare = true;
-        }, 2000);
+        updateAPI();
         
         setTimeout(function() {
             sync.announcements = false; 
             sync.liveshare = false; 
-            updateAPI();
-        }, 3000);
+        }, 1500);
     }
 
     function setAlarm() {

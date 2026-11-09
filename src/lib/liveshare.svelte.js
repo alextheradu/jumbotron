@@ -42,6 +42,9 @@ export async function updateAPI() {
         }
         else {
             console.log("error");
+            if (response.error == "Banned user") {
+                window.location.replace((resolve("/")))
+            }
         }
     }
 }

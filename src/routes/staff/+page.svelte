@@ -13,6 +13,21 @@
     import Slides from "$lib/configs/slides.svelte";
     import { internal } from "$lib/liveshare.svelte";
 
+    let admin = $state(false);
+
+    // Admin panel state variables
+    let allEventsList = $state("");
+    let bannedList = $state([]);
+    let targetBanSlack = $state("");
+    let targetUnbanSlack = $state("");
+    let adminMessage = $state("");
+    let adminError = $state("");
+
+    // Packet lookup state variables
+    let packetLookupCode = $state("");
+    let packetResultData = $state("");
+    let packetError = $state("");
+
     // Handle creds
     onMount(async () => {
         if (localStorage.getItem("creds")) {
@@ -64,6 +79,152 @@
         }
     })
 
+    // Fetch all events and banned list for admin console view
+    async function fetchAllEvents() {
+        adminMessage = "";
+        adminError = "";
+        try {
+            // Fetch events list
+            const res = await fetch(`https://api.jumbotron.hackclub.com/allEvents?code=${internal.code}&password=${internal.password}`);
+            const data = await res.json();
+            if (!res.ok) {
+                adminError = data.error || "Failed to fetch events";
+                return;
+            }
+            // Pretty print JSON safely
+            try {
+                let parsed = JSON.parse(data.list);
+                allEventsList = JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                allEventsList = data.list;
+            }
+
+            // Fetch separate banned list using the GET endpoint
+            const banRes = await fetch(`https://api.jumbotron.hackclub.com/getBans?code=${internal.code}&password=${internal.password}`);
+            const banData = await banRes.json();
+            if (banRes.ok && banData.list) {
+                try {
+                    bannedList = JSON.parse(banData.list);
+                } catch (e) {
+                    bannedList = [];
+                }
+            } else {
+                bannedList = [];
+            }
+
+            adminMessage = "Events list and bans loaded successfully.";
+        } catch (err) {
+            adminError = "Network error while fetching events.";
+        }
+    }
+
+    // Call /getPacket for a specific code
+    async function fetchPacketByCode(codeToFetch) {
+        if (!codeToFetch || codeToFetch.trim() === "") {
+            packetError = "Please enter a valid code to query.";
+            return;
+        }
+        packetError = "";
+        packetResultData = "";
+        try {
+            const res = await fetch(`https://api.jumbotron.hackclub.com/getPacket?code=${codeToFetch.trim()}`);
+            const data = await res.json();
+            if (!res.ok) {
+                packetError = data.error || "Failed to fetch packet for this code.";
+                return;
+            }
+            packetResultData = JSON.stringify(data, null, 2);
+        } catch (err) {
+            packetError = "Network error while fetching packet.";
+        }
+    }
+
+    // Save/Replace all events via /setEvents
+    async function saveAllEvents() {
+        adminMessage = "";
+        adminError = "";
+        try {
+            const res = await fetch(`https://api.jumbotron.hackclub.com/setEvents`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code: internal.code,
+                    password: internal.password,
+                    items: allEventsList
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                adminError = data.error || "Failed to update events";
+                return;
+            }
+            adminMessage = data.message || "Events updated successfully.";
+        } catch (err) {
+            adminError = "Network error while saving events.";
+        }
+    }
+
+    // Ban specific user via /banEvent using Slack ID
+    async function banSpecificUser(banSlackTarget) {
+        if (!banSlackTarget || banSlackTarget.trim() === "") {
+            adminError = "Please enter a valid Slack ID to ban.";
+            return;
+        }
+        adminMessage = "";
+        adminError = "";
+        try {
+            const res = await fetch(`https://api.jumbotron.hackclub.com/banEvent`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code: internal.code,
+                    password: internal.password,
+                    banSlack: banSlackTarget.trim()
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                adminError = data.error || "Failed to ban user";
+                return;
+            }
+            adminMessage = data.message || `Slack ID ${banSlackTarget} banned successfully.`;
+            targetBanSlack = "";
+            fetchAllEvents(); // Refresh list
+        } catch (err) {
+            adminError = "Network error while banning user.";
+        }
+    }
+
+    // Unban specific user via /unbanEvent using Slack ID
+    async function unbanSpecificUser(unbanSlackTarget) {
+        if (!unbanSlackTarget || unbanSlackTarget.trim() === "") {
+            adminError = "Please enter a valid Slack ID to unban.";
+            return;
+        }
+        adminMessage = "";
+        adminError = "";
+        try {
+            const res = await fetch(`https://api.jumbotron.hackclub.com/unbanEvent`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code: internal.code,
+                    password: internal.password,
+                    unbanSlack: unbanSlackTarget.trim()
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                adminError = data.error || "Failed to unban user";
+                return;
+            }
+            adminMessage = data.message || `Slack ID ${unbanSlackTarget} unbanned successfully.`;
+            targetUnbanSlack = "";
+            fetchAllEvents(); // Refresh list immediately
+        } catch (err) {
+            adminError = "Network error while unbanning user.";
+        }
+    }
     
     // Static placeholder constants
     const liveshareEnabled = false;
@@ -71,34 +232,6 @@
     const isOpenGate = false;
     const isPaused = false;
     const isSyncActive = false;
-
-    async function requestWakeLock() {
-        if ('wakeLock' in navigator) {
-            try {
-                const wakeLock = await navigator.wakeLock.request('screen');
-                console.log("WakeLock enabled");
-                
-                wakeLock.addEventListener("release", () => {
-                    console.log("WakeLock was released");
-                });
-            } catch (err) {
-                console.error(`${err.name}, ${err.message}`);
-            }
-        }
-    }
-
-    onMount(() => {
-        requestWakeLock();
-
-        const handleVisibilityChange = async () => {
-            if (document.visibilityState === 'visible') {
-                await requestWakeLock();
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    });
 
     let pfpLoaded = $state(false);
 </script>
@@ -118,6 +251,42 @@
             margin-bottom: 10px;
         }
     }
+    .admin-box {
+        text-align: left;
+        textarea {
+            width: 100%;
+            height: 250px;
+            font-family: monospace;
+            padding: 10px;
+            border-radius: 10px;
+            border: 2px solid grey;
+            background-color: white;
+            box-sizing: border-box;
+            margin-top: 10px;
+        }
+        input {
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 2px solid grey;
+            margin-right: 10px;
+            font-size: 16px;
+        }
+        button {
+            background-color: rgb(58, 57, 57);
+            color: white;
+            border: none;
+            padding: 9px 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: rgb(80, 78, 78);
+        }
+    }
+    .error-msg { color: #ec374f; font-weight: bold; margin-top: 10px; }
+    .success-msg { color: #2ecc71; font-weight: bold; margin-top: 10px; }
+
     @keyframes spin {
         0% {
             transform: rotate(0deg);
@@ -253,6 +422,16 @@
         }
     }
 
+    .sideButton {
+        background-color: rgb(58, 57, 57);
+        margin-left: -15px;
+        transform: scale(0.9);
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
 </style>
 
 <header style:margin-bottom=30px>
@@ -266,14 +445,27 @@
     </h1>
     <h2 style:margin-top=3px style:font-size=20px>{eventName} Organizer Console</h2>
 </header>
-<div id="name">Logged in as <br><span>{internal.name}</span></div>
-<!--<svg style="display: block; margin: 0 auto" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="admin" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="100" height="100"><path d="M21.437 17.023a1 1 0 0 1 .785.977v2.2H23a1 1 0 0 1 .907 1.42l-2.222 4.8a1 1 0 0 1-1.907-.42v-2.2H19a1 1 0 0 1-.907-1.42l2.222-4.8a1 1 0 0 1 1.122-.557zM19.834 16.977C20.714 16.173 21 14.873 21 13a5 5 0 0 0-10 0c0 1.873.286 3.173 1.165 3.977a8.029 8.029 0 0 0-3.6 4.062c-.162.408-.213.939.162 1.168.792.485 1.632-.457 2.105-1.257a5.997 5.997 0 0 1 5.48-2.942c1.132.058 2.373-.055 3.24-.784a8.75 8.75 0 0 0 .282-.247zM19 13c0 1.683-.271 2.241-.47 2.456-.162.176-.68.544-2.53.544-1.85 0-2.368-.368-2.53-.544C13.27 15.24 13 14.683 13 13a3 3 0 1 1 6 0z"/></svg>-->
+<div id="name">Logged in as <br><span>{internal.name}</span>
+    {#if internal.slack == "U08EMT46G3V"} <!-- This can be modified to be dynamic list in the future -->
+        <br>
+        <button class="sideButton" style:margin-bottom=0px onclick={() => {
+            admin = !admin;
+            if (admin) fetchAllEvents();
+        }}>{(admin) ? "Switch to Organizer" : "Switch to Admin"}</button>
+    {/if}
+    {#if internal.initComplete && !admin}
+    <br>
+    <button class="sideButton">Merge Events</button>
+    {/if}
+</div>
+
 <img id="pfp" class:loaded={pfpLoaded} onload={() => {pfpLoaded = true}} src="https://cachet.hackclub.com/users/{internal.slack}/r" alt="Profile" />
 <p style:margin-bottom=40px><button onclick={() => {localStorage.removeItem("creds"); localStorage.removeItem("cityName"); window.location.replace("/")}}>
     <svg style="display: block; margin: 0 auto;" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="view-back" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="30" height="30"><path d="M19.768,23.89c0.354,-0.424 0.296,-1.055 -0.128,-1.408c-1.645,-1.377 -5.465,-4.762 -6.774,-6.482c1.331,-1.749 5.1,-5.085 6.774,-6.482c0.424,-0.353 0.482,-0.984 0.128,-1.408c-0.353,-0.425 -0.984,-0.482 -1.409,-0.128c-1.839,1.532 -5.799,4.993 -7.2,6.964c-0.219,0.312 -0.409,0.664 -0.409,1.054c0,0.39 0.19,0.742 0.409,1.053c1.373,1.932 5.399,5.462 7.2,6.964l0.001,0.001c0.424,0.354 1.055,0.296 1.408,-0.128Z"/></svg>
     Sign out
 </button></p>
 
+{#if !admin}
 <div id="main" class="config" style:background-color="white" style:border-color="rgb(230,230,230)" style:box-shadow="0px 0px 10px 5px rgba(0,0,0, 0.3)">
     <h3>Main Configuration</h3>
     <Main />
@@ -303,3 +495,64 @@
 <div id="syncingNotif" class:active={sync.slides || sync.announcements}>
     <p style:color="white"><strong><span translate="no" class="material-symbols-outlined">sync</span></strong></p>
 </div>
+{:else if admin}
+<div class="config admin-box" style:background-color="white" style:border-color="rgb(230,230,230)" style:box-shadow="0px 0px 10px 5px rgba(0,0,0, 0.3)">
+    <h3 style:font-family="Atkinson Hyperlegible Mono, Montserrat" style:font-weight=800>Administrator Control Panel</h3>
+
+    {#if adminError}
+        <p class="error-msg">{adminError}</p>
+    {/if}
+    {#if adminMessage}
+        <p class="success-msg">{adminMessage}</p>
+    {/if}
+
+
+    <div style:display="flex" style:justify-content="center">
+        <div style="margin-top: 25px;">
+            <h4 style="margin-bottom: 8px;">Ban / Terminate User (Slack ID)</h4>
+            <p><input type="text" placeholder="Enter Slack ID" bind:value={targetBanSlack} />
+            <button onclick={() => banSpecificUser(targetBanSlack)}>Ban & Terminate</button></p>
+        </div>
+
+        <div style="margin-top: 25px;">
+            <h4 style="margin-bottom: 8px;">Unban User (Slack ID)</h4>
+            <p><input type="text" placeholder="Enter Slack ID" bind:value={targetUnbanSlack} />
+            <button onclick={() => unbanSpecificUser(targetUnbanSlack)} style="background-color: rgb(46, 204, 113);">Unban User</button></p>
+        </div>
+    </div>
+
+    <div style="margin-top: 25px;">
+        <h4 style="margin-bottom: 5px;">Current Banned Slack IDs:</h4>
+        <p style="font-family: monospace; font-weight: bold;">{bannedList && bannedList.length > 0 ? bannedList.join(", ") : "None"}</p>
+    </div>
+
+    <div style="margin-top: 25px;">
+        <h4 style="margin-bottom: 5px;">Active Tokens Database (JSON)</h4>
+        <textarea bind:value={allEventsList}></textarea>
+        <div style="margin-top: 12px;">
+            <button onclick={() => {window.navigator.clipboard.writeText(allEventsList)}}>Copy JSON</button>
+            <button onclick={saveAllEvents}>Save & Replace JSON</button>
+            <button onclick={fetchAllEvents} style="background-color: rgb(110, 108, 108); margin-left: 10px;">Refresh Data</button>
+        </div>
+    </div>
+</div>
+
+<div class="config">
+    <div style="margin-top: 25px;">
+        <h4 style="margin-bottom: 8px;">Fetch Packet by Code</h4>
+        <p>
+            <input type="text" placeholder="Enter Code" bind:value={packetLookupCode} />
+            <button onclick={() => fetchPacketByCode(packetLookupCode)} style="background-color: rgb(52, 152, 219);">Fetch Packet</button>
+        </p>
+        {#if packetError}
+            <p class="error-msg">{packetError}</p>
+        {/if}
+        {#if packetResultData}
+            <div style="margin-top: 10px; display: flex; justify-content: center">
+                <textarea readonly bind:value={packetResultData} style="height: 150px;"></textarea>
+                <p><button style="margin-top: 8px;" onclick={() => {window.navigator.clipboard.writeText(packetResultData)}}>Copy Packet JSON</button></p>
+            </div>
+        {/if}
+    </div>
+</div>
+{/if}

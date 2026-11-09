@@ -27,11 +27,13 @@
                 }, 5000);
             }
         } else if (localStorage.getItem("creds")) {
+            /*
             redirectReason = "Redirecting based on your saved staff credentials.";
             showRedirectWarning = true;
             redirectTimer = setTimeout(() => {
                 window.location.href = resolve("/staff");
             }, 5000);
+            */
         }
     });
 

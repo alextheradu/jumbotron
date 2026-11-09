@@ -48,8 +48,7 @@
         
         liveshareData.file = link;
 
-        setTimeout(function() {sync.liveshare = true;}, 2000);
-        setTimeout(function() {sync.slides = false; sync.liveshare = false;}, 3000);
+        setTimeout(function() {sync.slides = false}, 1500);
         updateAPI();
     }
 
@@ -58,8 +57,7 @@
         liveshareData.file = null;
         fileLink = "";
 
-        setTimeout(function() {sync.liveshare = true;}, 2000);
-        setTimeout(function() {sync.slides = false; sync.liveshare = false;}, 3000);
+        setTimeout(function() {sync.slides = false}, 1500);
         updateAPI();
     }
 
@@ -69,8 +67,7 @@
         
         liveshareData.youtube = { url: ytLink, embedUrl: link };
 
-        setTimeout(function() {sync.liveshare = true;}, 2000);
-        setTimeout(function() {sync.slides = false; sync.liveshare = false;}, 3000);
+        setTimeout(function() {sync.slides = false}, 1500);
         updateAPI();
     }
 
@@ -79,8 +76,7 @@
         liveshareData.youtube = null;
         ytLink = "";
 
-        setTimeout(function() {sync.liveshare = true;}, 2000);
-        setTimeout(function() {sync.slides = false; sync.liveshare = false;}, 3000);
+        setTimeout(function() {sync.slides = false}, 1500);
         updateAPI();
     }
 
@@ -90,8 +86,7 @@
         
         liveshareData.website = link;
 
-        setTimeout(function() {sync.liveshare = true;}, 2000);
-        setTimeout(function() {sync.slides = false; sync.liveshare = false;}, 3000);
+        setTimeout(function() {sync.slides = false}, 1500);
         updateAPI();
     }
 
@@ -100,8 +95,7 @@
         liveshareData.website = null;
         qrLink = "";
 
-        setTimeout(function() {sync.liveshare = true;}, 2000);
-        setTimeout(function() {sync.slides = false; sync.liveshare = false;}, 3000);
+        setTimeout(function() {sync.slides = false}, 1500);
         updateAPI();
     }
 
