@@ -36,7 +36,11 @@
             
         let data = await raw.json();
         let creds = data.credentials;
-        localStorage.setItem("creds", creds);
+        if (data.sources) {
+             creds.push(JSON.stringify(data.sources));
+        }
+        console.log(creds)
+        localStorage.setItem("creds", JSON.stringify(creds));
         window.location.replace(resolve("/staff"));
         return;
         

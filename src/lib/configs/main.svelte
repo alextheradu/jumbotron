@@ -67,6 +67,9 @@
             width: 40%;
             font-family: Atkinson Hyperlegible Mono, Montserrat
         }
+        input[type="text"].incomplete {
+            animation: inputPulse 2s ease-in-out infinite;
+        }
         input[type="submit"] {
             width: 200px;
             cursor: pointer;
@@ -84,13 +87,22 @@
     #copyButton:active {
         background-color: #ec374ff2;
     }
+
+    @keyframes inputPulse {
+        0%, 100% {
+            border: 5px solid rgb(206, 206, 206);
+        }
+        50% {
+            border: 5px solid rgb(135, 135, 135);
+        }
+    }
 </style>
 <h4 id="code">{internal.code}</h4>
 <h4><span style:font-family="Atkinson Hyperlegible Mono, Montserrat" translate="no">{codeToLink()}</span> {#if internal.code != null}<button transition:slide onclick={() => {navigator.clipboard.writeText(codeToLink())}} id="copyButton">Copy Link</button>{/if}</h4>
 <p style="margin-left: 40px; margin-right: 40px;">This is the four-digit code that event participants can use on <a href="https://jumbotron.hackclub.com">the main page</a>. Participants can additionally use the provided link directly. <strong>It is specific to you as an organizer, not your event, and is assigned to you for the entirety of {eventName}.</strong></p>
 {#if !internal.initComplete}
 <form transition:slide style:margin-top=50px onsubmit={() => {event.preventDefault(); initializeEvent();}}>
-    <input required="true" aria-required="true" bind:value={cityName} type="text" aria-placeholder="Enter city or location name" placeholder="*Enter city or location name" autocapitalize="words">
+    <input class:incomplete={cityName == ""} required="true" aria-required="true" bind:value={cityName} type="text" aria-placeholder="Enter city or location name" placeholder="*Enter city or location name" autocapitalize="words">
     {#if cityName.length != 0}<p>Your event is referred to as {" "}<u translate="no"><strong>{eventName} {cityName}</strong></u></p>
     <p style:font-family="Atkinson Hyperlegible Mono, Montserrat">Please ensure correct formatting. This will be visible to participants.</p>
     <input type=submit value="Continue">

@@ -83,6 +83,9 @@
     function enableQR() {
         sync.slides = true;
         let link = qrLink;
+        if (link.indexOf("http") == -1) {
+            link = "https://" + link;
+        }
         
         liveshareData.website = link;
 

@@ -11,9 +11,12 @@
     import Main from "$lib/configs/main.svelte";
     import Announcements from "$lib/configs/announcements.svelte";
     import Slides from "$lib/configs/slides.svelte";
+    import Merge from "$lib/configs/merge.svelte";
     import { internal } from "$lib/liveshare.svelte";
 
     let admin = $state(false);
+    let adminList = $state([]);
+    let merge = $state(false);
 
     // Admin panel state variables
     let allEventsList = $state("");
@@ -31,12 +34,20 @@
     // Handle creds
     onMount(async () => {
         if (localStorage.getItem("creds")) {
-            let creds = (localStorage.getItem("creds")).split(",");
+            let creds = JSON.parse(localStorage.getItem("creds"));
+            console.log(creds);
             
             internal.code = creds[0];
             internal.slack = creds[1];
             internal.name = creds[2];
             internal.password = creds[3]
+            if (creds[4]) {
+                internal.sources = JSON.parse(creds[4]);
+
+            }
+            else {
+                console.log("No merge sources")
+            }
 
             if (localStorage.getItem("cityName")) {
                 internal.cityName = localStorage.getItem("cityName");
@@ -79,6 +90,15 @@
         }
     })
 
+    onMount(() => {
+        setTimeout(async () => {
+            const response = await fetch(`https://api.jumbotron.hackclub.com/getAdmins?code=${internal.code}&password=${internal.password}`);
+            const data = await response.json();
+            adminList = data.admins
+        }, 100);
+
+    })
+
     // Fetch all events and banned list for admin console view
     async function fetchAllEvents() {
         adminMessage = "";
@@ -117,6 +137,31 @@
             adminError = "Network error while fetching events.";
         }
     }
+
+    // Listen for org-wide updates via EventSource
+    /*
+    onMount(() => {
+        const orgEventSource = new EventSource(`https://api.jumbotron.hackclub.com/getOrgUpdates?code=${internal.code}&password=${internal.password}`);
+
+        orgEventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log("Org update received:", data);
+            } catch (err) {
+                console.log("Org update received (raw):", event.data);
+            }
+        };
+
+        orgEventSource.onerror = (err) => {
+            console.error("Org EventSource failed:", err);
+        };
+
+        return () => {
+            orgEventSource.close();
+        };
+    });
+
+    */
 
     // Call /getPacket for a specific code
     async function fetchPacketByCode(codeToFetch) {
@@ -225,14 +270,37 @@
             adminError = "Network error while unbanning user.";
         }
     }
-    
-    // Static placeholder constants
-    const liveshareEnabled = false;
-    const liveshareAway = false;
-    const isOpenGate = false;
-    const isPaused = false;
-    const isSyncActive = false;
+    // Download Active Tokens as a JSON file
+    function downloadActiveTokens() {
+        if (!allEventsList || allEventsList.trim() === "") {
+            adminError = "No data available to download.";
+            return;
+        }
+        
+        try {
+            // Ensure data is pretty-printed JSON if possible
+            let content = allEventsList;
+            try {
+                const parsed = JSON.parse(allEventsList);
+                content = JSON.stringify(parsed, null, 2);
+            } catch (e) {
+                // Keep as-is if it's not valid JSON string
+            }
 
+            const blob = new Blob([content], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `active-tokens-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            adminMessage = "Active tokens downloaded successfully.";
+        } catch (err) {
+            adminError = "Failed to download tokens file.";
+        }
+    }
     let pfpLoaded = $state(false);
 </script>
 
@@ -299,43 +367,6 @@
         }
     }
 
-    #liveshareNotif {
-        user-select: none;
-        z-index: 1000;
-        position: fixed;
-        right: -305px;
-        top: 90px;
-        background-color: #635758f2;
-        border-radius: 20px;
-        color: white;
-        padding: 0px;
-        transition: all 0.5s ease-in-out;
-        border: 5px solid #ec374f00;
-
-        span {
-            transform: translateY(5px);
-            margin-right: 20px;
-        }
-        p {
-            transform: translateY(-3px);
-            padding-right: 50px;
-        }
-    }
-    #liveshareNotif.away {
-        right: -25px;
-        background-color: #ec374ff2;
-    }
-    #liveshareNotif.active {
-        right: -225px;
-        animation: pulsate infinite 2s ease-in-out;
-    }
-    #liveshareNotif.pause {
-        right: -235px;
-        background-color: #635758f2;
-    }
-    #liveshareNotif.up {
-        top: 10px;  
-    }
     @keyframes pulsate {
         0%, 100% {
             background-color: #db5164fd;
@@ -432,6 +463,7 @@
         border-radius: 6px;
         cursor: pointer;
     }
+
 </style>
 
 <header style:margin-bottom=30px>
@@ -446,17 +478,22 @@
     <h2 style:margin-top=3px style:font-size=20px>{eventName} Organizer Console</h2>
 </header>
 <div id="name">Logged in as <br><span>{internal.name}</span>
-    {#if internal.slack == "U08EMT46G3V"} <!-- This can be modified to be dynamic list in the future -->
+    {#if adminList.indexOf(internal.slack) != -1} <!-- This can be modified to be dynamic list in the future -->
         <br>
         <button class="sideButton" style:margin-bottom=0px onclick={() => {
             admin = !admin;
             if (admin) fetchAllEvents();
         }}>{(admin) ? "Switch to Organizer" : "Switch to Admin"}</button>
     {/if}
-    {#if internal.initComplete && !admin}
+
+    <!--{#if internal.initComplete && !admin}
     <br>
-    <button class="sideButton">Merge Events</button>
-    {/if}
+    <button class="sideButton" onclick={() => {
+        merge ? merge = false : merge = true;
+        if (merge) fetchIncomingMergeRequests();
+    }}>{merge ? "Return to Main" : "Merge Events"}</button>
+    {/if}-->
+
 </div>
 
 <img id="pfp" class:loaded={pfpLoaded} onload={() => {pfpLoaded = true}} src="https://cachet.hackclub.com/users/{internal.slack}/r" alt="Profile" />
@@ -465,7 +502,7 @@
     Sign out
 </button></p>
 
-{#if !admin}
+{#if !admin && !merge}
 <div id="main" class="config" style:background-color="white" style:border-color="rgb(230,230,230)" style:box-shadow="0px 0px 10px 5px rgba(0,0,0, 0.3)">
     <h3>Main Configuration</h3>
     <Main />
@@ -487,10 +524,6 @@
 <p style:margin-top=50px><span style:font-size=50px class="material-symbols-outlined" translate="no">arrow_circle_up</span></p>
 <p style:font-family="Atkinson Hyperlegible Mono, Montserrat" style:font-weight=700>Please complete the quick configuration steps above</p>
 {/if}
-
-<div id="liveshareNotif" class:away={false} class:active={internal.initComplete} class:up={!isSyncActive} class:pause={isPaused}>
-    <p style:color="white"><strong><span translate="no" class="material-symbols-outlined">podcasts</span></strong></p>
-</div>
 
 <div id="syncingNotif" class:active={sync.slides || sync.announcements}>
     <p style:color="white"><strong><span translate="no" class="material-symbols-outlined">sync</span></strong></p>
@@ -532,6 +565,7 @@
         <div style="margin-top: 12px;">
             <button onclick={() => {window.navigator.clipboard.writeText(allEventsList)}}>Copy JSON</button>
             <button onclick={saveAllEvents}>Save & Replace JSON</button>
+            <button onclick={downloadActiveTokens} style="background-color: rgb(41, 128, 185);">Download JSON</button>
             <button onclick={fetchAllEvents} style="background-color: rgb(110, 108, 108); margin-left: 10px;">Refresh Data</button>
         </div>
     </div>
@@ -555,4 +589,6 @@
         {/if}
     </div>
 </div>
+{:else if merge}
+    <Merge />
 {/if}

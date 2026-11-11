@@ -403,7 +403,7 @@
                     <a 
                         class="btn-link"
                         style="margin-bottom: 50px; margin-top: 20px;"
-                        href="https://auth.hackclub.com/oauth/authorize?client_id=e86d4d7eec9c546e6c4700388d4fea7f&redirect_uri=https%3A%2F%2Fsymmetrical-doodle-69qgr7v97j76f59j7-5173.app.github.dev%2Fcallback&response_type=code&scope=name+verification_status+slack_id"
+                        href="https://auth.hackclub.com/oauth/authorize?client_id=e86d4d7eec9c546e6c4700388d4fea7f&redirect_uri=https%3A%2F%2Fjumbotron.hackclub.com%2Fcallback&response_type=code&scope=name+verification_status+slack_id"
                     >
                         Continue
                     </a>
