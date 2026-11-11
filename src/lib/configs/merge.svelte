@@ -1,33 +1,42 @@
 <script>
     import { slide } from "svelte/transition";
-    import { onMount, onDestroy } from "svelte";
     import { internal } from "$lib/liveshare.svelte";
+    import {
+        org,
+        sendMergeRequest,
+        cancelMergeRequest,
+        respondMergeRequest,
+        removeMember,
+        leaveMerge
+    } from "$lib/org.svelte.js";
 
     // Merge panel state variables
     let digit1 = $state("");
     let digit2 = $state("");
     let digit3 = $state("");
     let digit4 = $state("");
-    
+
     // Computed destination code derived from the 4 digit boxes
     let targetDestinationCode = $derived(`${digit1}${digit2}${digit3}${digit4}`);
 
-    let mergeStatus = $state("");
     let mergeMessage = $state("");
     let mergeError = $state("");
-    let incomingRequests = $state([]);
-    let mergeEventSource = null;
+    let busy = $state(false);
+
+    let state = $derived(org.state);
+    let isBridged = $derived(state?.role === "bridged");
+    let members = $derived(state?.members ?? []);
+    let incomingRequests = $derived(state?.incoming ?? []);
+    let outgoing = $derived(state?.outgoing ?? null);
 
     let inputRefs = [];
-
-    onMount(fetchIncomingMergeRequests);
 
     // Handle typing and backspace navigation across digit inputs
     function handleDigitInput(e, index) {
         const val = e.target.value;
         // Keep only the last typed character if multiple entered
         const char = val.slice(-1);
-        
+
         if (index === 0) digit1 = char;
         if (index === 1) digit2 = char;
         if (index === 2) digit3 = char;
@@ -54,6 +63,8 @@
             inputRefs[index - 1]?.focus();
         } else if (e.key === "ArrowRight" && index < 3) {
             inputRefs[index + 1]?.focus();
+        } else if (e.key === "Enter" && targetDestinationCode.length === 4) {
+            submitMergeRequest();
         }
     }
 
@@ -66,157 +77,49 @@
             if (digits[1]) digit2 = digits[1];
             if (digits[2]) digit3 = digits[2];
             if (digits[3]) digit4 = digits[3];
-            
+
             const nextIndex = Math.min(digits.length, 3);
             inputRefs[nextIndex]?.focus();
         }
     }
 
-    // 1. Send outgoing merge request (`/mergeRequest`) via EventSource
-    function sendMergeRequest() {
-        if (targetDestinationCode.length < 4 || targetDestinationCode.trim() === "") {
+    // Wraps every merge action: one in flight at a time, errors and success copy surfaced inline.
+    // Resulting state changes arrive through org.state (POST response + /orgStream push).
+    async function run(action, successText) {
+        if (busy) return;
+        busy = true;
+        mergeError = "";
+        mergeMessage = "";
+        try {
+            await action();
+            mergeMessage = successText;
+        } catch (err) {
+            mergeError = err.message || "Network error, please try again.";
+        } finally {
+            busy = false;
+        }
+    }
+
+    function submitMergeRequest() {
+        if (!/^\d{4}$/.test(targetDestinationCode)) {
             mergeError = "Please enter a valid 4-digit destination code.";
             return;
         }
-        mergeError = "";
-        mergeMessage = "";
-        mergeStatus = "Connecting...";
-
-        // Close any existing connection first
-        if (mergeEventSource) {
-            mergeEventSource.close();
-        }
-
-        const url = `https://api.jumbotron.hackclub.com/mergeRequest?code=${encodeURIComponent(internal.code)}&password=${encodeURIComponent(internal.password)}&destination=${encodeURIComponent(targetDestinationCode.trim())}`;
-
-        mergeEventSource = new EventSource(url);
-
-        mergeEventSource.onmessage = (event) => {
-            console.log(event.data);
-            const status = event.data.trim();
-            mergeStatus = status;
-
-            if (status.includes("accepted")) {
-                mergeStatus = "Accepted";
-                mergeEventSource.close();
-            } else if (status.includes("rejected")) {
-                mergeStatus = "Rejected";
-                mergeEventSource.close();
-            } else if (status.includes("cancelled")) {
-                mergeStatus = "Cancelled (you accepted another merge)";
-                mergeEventSource.close();
-            }
-        };
-
-        mergeEventSource.onerror = (err) => {
-            if (mergeEventSource.readyState === EventSource.CLOSED) {
-                // Closed normally or ended by server
-            } else {
-                mergeError = "Connection error during merge request.";
-                mergeStatus = "";
-            }
-            mergeEventSource.close();
-        };
+        run(() => sendMergeRequest(targetDestinationCode), "Merge request sent. It stays pending until they respond or you cancel.");
     }
 
-    // 2. Fetch incoming merge requests (`/getMergeRequests`)
-    async function fetchIncomingMergeRequests() {
-        mergeError = "";
-        try {
-            const res = await fetch(`https://api.jumbotron.hackclub.com/getMergeRequests?code=${internal.code}&password=${internal.password}`);
-            const data = await res.json();
-            if (!res.ok) {
-                mergeError = data.error || "Failed to fetch incoming requests.";
-                return;
-            }
-            incomingRequests = data.requests || [];
-        } catch (err) {
-            mergeError = "Network error while loading requests.";
-        }
+    function acknowledgeMerge(req, accept) {
+        run(() => respondMergeRequest(req.code, accept), `${accept ? "Accepted" : "Declined"} merge request from ${req.name}.`);
     }
 
-    // 3. Accept or Reject incoming requests (`/ackMergeRequest`)
-    async function acknowledgeMerge(requestorCode, requestorName, acceptValue) {
-        mergeError = "";
-        mergeMessage = "";
-        try {
-            const res = await fetch(`https://api.jumbotron.hackclub.com/ackMergeRequest`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    code: internal.code,
-                    password: internal.password,
-                    recipient: requestorCode,
-                    accept: acceptValue
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                mergeError = data.error || "Failed to process request action.";
-                return;
-            }
-            internal.sources = data.sources || internal.sources;
-            mergeMessage = `Successfully ${acceptValue ? "accepted" : "rejected"} merge request from ${requestorName}.`;
-            
-            if (acceptValue) {
-                const res2 = await fetch(`https://api.jumbotron.hackclub.com/getMergedEvents?code=${internal.code}&password=${internal.password}`);
-                const data2 = await res2.json();
-                console.log("New merge list", data2);
-            }
-        } catch (err) {
-            mergeError = "Network error while updating merge request.";
-        }
-        fetchIncomingMergeRequests();
+    function unmergeEvent(member) {
+        if (!confirm(`Remove ${member.name}'s event from your merge? Their participants will keep the current screen but stop receiving your updates.`)) return;
+        run(() => removeMember(member.code), `Removed ${member.name}'s event from your merge.`);
     }
 
-    // 4. Unmerge event route (`/unmergeEvents`)
-    async function unmergeEvent(slackId) {
-        mergeError = "";
-        mergeMessage = "";
-        try {
-            const res = await fetch(`https://api.jumbotron.hackclub.com/unmergeEvents`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    code: internal.code,
-                    password: internal.password,
-                    root: internal.code,
-                    slack: slackId
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                mergeError = data.error || "Failed to unmerge event.";
-                return;
-            }
-            // Filter out the unmerged slack ID from internal sources
-            internal.sources = internal.sources.filter(s => s !== slackId);
-            mergeMessage = `Successfully removed event for user ${slackId}.`;
-        } catch (err) {
-            mergeError = "Network error while unmerging event.";
-        }
-    }
-
-    // Clean up open SSE streams when component unmounts
-    onDestroy(() => {
-        if (mergeEventSource) {
-            mergeEventSource.close();
-        }
-    });
-
-    // Test helper to emulate an outbound request being accepted
-    function emulateAcceptedRequest() {
-        mergeError = "";
-        mergeMessage = "";
-        mergeStatus = "Connecting...";
-
-        // Simulate network delay before acceptance
-        setTimeout(() => {
-            mergeStatus = "Accepted";
-            
-            // If acceptance updates sources, you can mock that here too if needed:
-            // internal.sources = [...(internal.sources || []), "mock_source_code"];
-        }, 1000);
+    function leave() {
+        if (!confirm(`Leave ${state.root.name}'s merged event? Your participants will stop receiving their updates.`)) return;
+        run(leaveMerge, "You left the merged event. Your event is standalone again.");
     }
 </script>
 
@@ -231,17 +134,6 @@
         h3 {
             margin-bottom: 10px;
         }
-    }
-    textarea {
-        width: 100%;
-        height: 250px;
-        font-family: monospace;
-        padding: 10px;
-        border-radius: 10px;
-        border: 2px solid grey;
-        background-color: white;
-        box-sizing: border-box;
-        margin-top: 10px;
     }
     button {
         background-color: rgb(58, 57, 57);
@@ -366,20 +258,46 @@
         box-shadow: 0 0 5px rgba(58, 57, 57, 0.3);
     }
 
+    .live {
+        font-family: Atkinson Hyperlegible Mono, Montserrat;
+        font-size: 13px;
+        color: #2ecc71;
+        margin-top: 0;
+    }
+    .live.offline {
+        color: #e67e22;
+    }
+    button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
 </style>
 
 <div class="config admin-box" style:background-color="white" style:border-color="rgb(230,230,230)" style:box-shadow="0px 0px 10px 5px rgba(0,0,0, 0.3)" transition:slide>
     <h3 style:font-family="Montserrat" style:font-weight=800>Event Merging Panel</h3>
     <p>Bridge your event into another host or accept inputs from other organizers.</p>
     <h4 id="code">{internal.code}</h4>
-    
-    {#if internal.sources && internal.sources.length > 0} 
+    <p class="live" class:offline={!org.connected}>{org.connected ? "Live" : "Reconnecting..."}</p>
+
+    {#if !state}
+        <p>Loading merge status...</p>
+    {:else if isBridged}
+        <p>Merged into <strong>{state.root.name}</strong>'s event{state.root.cityName ? ` (${state.root.cityName})` : ""}, code <strong>{state.root.code}</strong>.</p>
+        <p>Your participants see the shared screen. Updates you push also go to everyone in the merge.</p>
         <div class="pfp-grid">
-            {#each internal.sources as x}
+            <img class="mergePfp" src="https://cachet.hackclub.com/users/{state.root.slack}/r" alt="{state.root.name}'s profile" title={state.root.name} />
+            {#each members.filter(m => m.code !== internal.code) as m (m.code)}
+                <img class="mergePfp" src="https://cachet.hackclub.com/users/{m.slack}/r" alt="{m.name}'s profile" title={m.name} />
+            {/each}
+        </div>
+        <p><button onclick={leave} disabled={busy}>Leave Merge</button></p>
+    {:else if members.length > 0}
+        <div class="pfp-grid">
+            {#each members as m (m.code)}
                 <div class="pfp-wrapper">
-                    <img class="mergePfp" src="https://cachet.hackclub.com/users/{x}/r" alt="Source user {x}" />
+                    <img class="mergePfp" src="https://cachet.hackclub.com/users/{m.slack}/r" alt="{m.name}'s profile" title="{m.name} ({m.code})" />
                     <div class="pfp-overlay">
-                        <button class="remove-btn" title="Remove event path" onclick={() => unmergeEvent(x)}><span translate="no" class="material-symbols-outlined">cancel</span></button>
+                        <button class="remove-btn" title="Remove {m.name}'s event" onclick={() => unmergeEvent(m)} disabled={busy}><span translate="no" class="material-symbols-outlined">cancel</span></button>
                     </div>
                 </div>
             {/each}
@@ -395,27 +313,25 @@
     {/if}
 </div>
 
+{#if state && !isBridged}
 <div class="config">
     <div style="margin-top: 25px;">
         <h4 style="margin-bottom: 8px;">Incoming Merge Requests</h4>
-        <div style="display: flex; justify-content: center">
-            <button onclick={fetchIncomingMergeRequests}>Refresh Requests</button>
-        </div>
 
         {#if incomingRequests.length === 0}
-            <p style="margin-top: 10px; margin-bottom: 10px; color: #666;">No pending incoming requests.</p>
+            <p style="margin-top: 10px; margin-bottom: 10px; color: #666;">No pending incoming requests. New ones appear here automatically.</p>
         {:else}
             <p>Events that merge into yours will use your event code</p>
             <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
-                {#each incomingRequests as req}
-                    <div style="display: flex; align-items: center; justify-content: space-between; background: #bfbfbf; padding: 12px; border-radius: 20px; border: 1px solid #ddd; width: 600px; align-self: center">
+                {#each incomingRequests as req (req.code)}
+                    <div transition:slide style="display: flex; align-items: center; justify-content: space-between; background: #bfbfbf; padding: 12px; border-radius: 20px; border: 1px solid #ddd; width: min(600px, 100%); box-sizing: border-box; align-self: center">
                         <div style="justify-content: left; margin-left: 10px">
                             <img style:margin-top=0px class="mergePfp" src="https://cachet.hackclub.com/users/{req.slack}/r" alt="{req.name}'s profile" />
-                            <p style:margin-bottom=0px style:font-family="Host Grotesk, Montserrat"><strong>{req.name}</strong></p>  
+                            <p style:margin-bottom=0px style:font-family="Host Grotesk, Montserrat"><strong>{req.name}</strong>{req.cityName ? ` · ${req.cityName}` : ""}</p>
                         </div>
                         <div>
-                            <button title="Accept Request" class="bigButton" onclick={() => acknowledgeMerge(req.code, req.name, true)} style="margin-right: 8px;"><span class="material-symbols-outlined" translate="no">check_circle</span></button>
-                            <button title="Deny Request" class="bigButton" onclick={() => acknowledgeMerge(req.code, req.name, false)}><span class="material-symbols-outlined" translate="no">cancel</span></button>
+                            <button title="Accept Request" class="bigButton" disabled={busy} onclick={() => acknowledgeMerge(req, true)} style="margin-right: 8px;"><span class="material-symbols-outlined" translate="no">check_circle</span></button>
+                            <button title="Deny Request" class="bigButton" disabled={busy} onclick={() => acknowledgeMerge(req, false)}><span class="material-symbols-outlined" translate="no">cancel</span></button>
                         </div>
                     </div>
                 {/each}
@@ -427,68 +343,35 @@
 <div class="config">
     <div style="margin-top: 25px; text-align: center;">
         <h4 style="margin-bottom: 8px;">Request to Merge Into Another Event</h4>
-        <p>If accepted, you are assigned the event code of the event you merge into.<br><strong>Enter their event code below</strong></p>
-        
-        <div class="digit-inputs-container">
-            <input 
-                type="text" 
-                maxlength="1" 
-                class="digit-box" 
-                bind:value={digit1} 
-                bind:this={inputRefs[0]}
-                oninput={(e) => handleDigitInput(e, 0)}
-                onkeydown={(e) => handleDigitKeydown(e, 0)}
-                onpaste={handlePaste}
-            />
-            <input 
-                type="text" 
-                maxlength="1" 
-                class="digit-box" 
-                bind:value={digit2} 
-                bind:this={inputRefs[1]}
-                oninput={(e) => handleDigitInput(e, 1)}
-                onkeydown={(e) => handleDigitKeydown(e, 1)}
-            />
-            <input 
-                type="text" 
-                maxlength="1" 
-                class="digit-box" 
-                bind:value={digit3} 
-                bind:this={inputRefs[2]}
-                oninput={(e) => handleDigitInput(e, 2)}
-                onkeydown={(e) => handleDigitKeydown(e, 2)}
-            />
-            <input 
-                type="text" 
-                maxlength="1" 
-                class="digit-box" 
-                bind:value={digit4} 
-                bind:this={inputRefs[3]}
-                oninput={(e) => handleDigitInput(e, 3)}
-                onkeydown={(e) => handleDigitKeydown(e, 3)}
-            />
-        </div>
+        {#if outgoing}
+            <p>Waiting for <strong>{outgoing.name}</strong> (code <strong>{outgoing.code}</strong>) to respond.</p>
+            <p>You can close this panel; the request stays pending.</p>
+            <p><button onclick={() => run(cancelMergeRequest, "Merge request cancelled.")} disabled={busy}>Cancel Request</button></p>
+        {:else if members.length > 0}
+            <p>Other events are merged into yours. Remove them before merging into another event.</p>
+        {:else}
+            <p>If accepted, you are assigned the event code of the event you merge into.<br><strong>Enter their event code below</strong></p>
 
-        <div style="margin-top: 15px;">
-            <button onclick={sendMergeRequest}>Send Merge Request</button>
-        </div>
+            <div class="digit-inputs-container">
+                {#each [0, 1, 2, 3] as i}
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="1"
+                        class="digit-box"
+                        value={[digit1, digit2, digit3, digit4][i]}
+                        bind:this={inputRefs[i]}
+                        oninput={(e) => handleDigitInput(e, i)}
+                        onkeydown={(e) => handleDigitKeydown(e, i)}
+                        onpaste={handlePaste}
+                    />
+                {/each}
+            </div>
 
-        <!--Testing-->
-        <div class="config" style="background-color: #fff9e6; border-color: #f1c40f;">
-            <h4 style="margin-bottom: 8px;">🧪 Testing Tools</h4>
-            <p>Quickly test UI states without an actual server response:</p>
-            <p>
-                <button onclick={emulateAcceptedRequest} style="background-color: #27ae60;">Emulate Accepted Request</button>
-                <button onclick={() => mergeStatus = "Rejected"} style="background-color: #c0392b; margin-left: 10px;">Emulate Rejected</button>
-            </p>
-            {#if mergeStatus}
-                <p style="font-family: monospace; font-weight: bold; margin-top: 10px;">Test Status: {mergeStatus}</p>
-            {/if}
-        </div>
-        <!---->
-
-        {#if mergeStatus}
-            <p style="font-family: monospace; font-weight: bold; margin-top: 10px;">Status: {mergeStatus}</p>
+            <div style="margin-top: 15px;">
+                <button onclick={submitMergeRequest} disabled={busy}>Send Merge Request</button>
+            </div>
         {/if}
     </div>
 </div>
+{/if}

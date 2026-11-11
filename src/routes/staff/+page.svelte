@@ -13,6 +13,7 @@
     import Slides from "$lib/configs/slides.svelte";
     import Merge from "$lib/configs/merge.svelte";
     import { internal } from "$lib/liveshare.svelte";
+    import { org, connectOrgStream, disconnectOrgStream } from "$lib/org.svelte.js";
 
     let admin = $state(false);
     let adminList = $state([]);
@@ -43,11 +44,10 @@
             internal.password = creds[3]
             if (creds[4]) {
                 internal.sources = JSON.parse(creds[4]);
+            }
 
-            }
-            else {
-                console.log("No merge sources")
-            }
+            // Live merge state (requests, merges, removals, admin resets) for this organizer
+            connectOrgStream({ onSignOut: signOut });
 
             if (localStorage.getItem("cityName")) {
                 internal.cityName = localStorage.getItem("cityName");
@@ -94,7 +94,7 @@
         setTimeout(async () => {
             const response = await fetch(`https://api.jumbotron.hackclub.com/getAdmins?code=${internal.code}&password=${internal.password}`);
             const data = await response.json();
-            adminList = data.admins
+            adminList = Array.isArray(data.admins) ? data.admins : [];
         }, 100);
 
     })
@@ -138,30 +138,14 @@
         }
     }
 
-    // Listen for org-wide updates via EventSource
-    /*
-    onMount(() => {
-        const orgEventSource = new EventSource(`https://api.jumbotron.hackclub.com/getOrgUpdates?code=${internal.code}&password=${internal.password}`);
+    onMount(() => disconnectOrgStream);
 
-        orgEventSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                console.log("Org update received:", data);
-            } catch (err) {
-                console.log("Org update received (raw):", event.data);
-            }
-        };
-
-        orgEventSource.onerror = (err) => {
-            console.error("Org EventSource failed:", err);
-        };
-
-        return () => {
-            orgEventSource.close();
-        };
-    });
-
-    */
+    function signOut() {
+        disconnectOrgStream();
+        localStorage.removeItem("creds");
+        localStorage.removeItem("cityName");
+        window.location.replace("/");
+    }
 
     // Call /getPacket for a specific code
     async function fetchPacketByCode(codeToFetch) {
@@ -464,6 +448,15 @@
         cursor: pointer;
     }
 
+    .merge-notice {
+        max-width: 600px;
+        margin: 10px auto 20px;
+        padding: 12px 18px;
+        border-radius: 20px;
+        background-color: #fff4d6;
+        border: 2px solid #f1c40f;
+        font-family: Atkinson Hyperlegible Mono, Montserrat;
+    }
 </style>
 
 <header style:margin-bottom=30px>
@@ -486,21 +479,27 @@
         }}>{(admin) ? "Switch to Organizer" : "Switch to Admin"}</button>
     {/if}
 
-    <!--{#if internal.initComplete && !admin}
+    {#if internal.initComplete && !admin}
     <br>
-    <button class="sideButton" onclick={() => {
-        merge ? merge = false : merge = true;
-        if (merge) fetchIncomingMergeRequests();
-    }}>{merge ? "Return to Main" : "Merge Events"}</button>
-    {/if}-->
+    <button class="sideButton" onclick={() => { merge = !merge; }}>
+        {merge ? "Return to Main" : "Merge Events"}{!merge && org.state?.incoming?.length ? ` (${org.state.incoming.length})` : ""}
+    </button>
+    {/if}
 
 </div>
 
 <img id="pfp" class:loaded={pfpLoaded} onload={() => {pfpLoaded = true}} src="https://cachet.hackclub.com/users/{internal.slack}/r" alt="Profile" />
-<p style:margin-bottom=40px><button onclick={() => {localStorage.removeItem("creds"); localStorage.removeItem("cityName"); window.location.replace("/")}}>
+<p style:margin-bottom=40px><button onclick={signOut}>
     <svg style="display: block; margin: 0 auto;" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="view-back" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="30" height="30"><path d="M19.768,23.89c0.354,-0.424 0.296,-1.055 -0.128,-1.408c-1.645,-1.377 -5.465,-4.762 -6.774,-6.482c1.331,-1.749 5.1,-5.085 6.774,-6.482c0.424,-0.353 0.482,-0.984 0.128,-1.408c-0.353,-0.425 -0.984,-0.482 -1.409,-0.128c-1.839,1.532 -5.799,4.993 -7.2,6.964c-0.219,0.312 -0.409,0.664 -0.409,1.054c0,0.39 0.19,0.742 0.409,1.053c1.373,1.932 5.399,5.462 7.2,6.964l0.001,0.001c0.424,0.354 1.055,0.296 1.408,-0.128Z"/></svg>
     Sign out
 </button></p>
+
+{#if org.notice}
+<p transition:slide class="merge-notice">{org.notice}</p>
+{/if}
+{#if org.state?.role === "bridged" && !merge && !admin}
+<p transition:slide class="merge-notice">Merged into <strong>{org.state.root.name}</strong>'s event (code {org.state.root.code}). Updates you push go to everyone in the merge.</p>
+{/if}
 
 {#if !admin && !merge}
 <div id="main" class="config" style:background-color="white" style:border-color="rgb(230,230,230)" style:box-shadow="0px 0px 10px 5px rgba(0,0,0, 0.3)">
