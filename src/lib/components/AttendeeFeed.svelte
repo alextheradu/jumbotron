@@ -3,10 +3,14 @@
     import { resolve } from "$app/paths";
     import { eventTheme } from "$lib/event.js";
     import { relativeToNow, parseClock, toAt } from "$lib/time.js";
+    import { safeHref } from "$lib/links.js";
 
     let { data, changed = [], now = new Date(), compact = false, emptyText = "" } = $props();
 
-    const youtubeUrl = (yt) => (typeof yt === "object" && yt ? yt.url : yt);
+    // Links from the packet are untrusted: anything that isn't plain http(s) is dropped.
+    let fileHref = $derived(data.file ? safeHref(data.file) : null);
+    let youtubeHref = $derived(data.youtube ? safeHref(typeof data.youtube === "object" ? data.youtube.url : data.youtube) : null);
+    let websiteHref = $derived(data.website ? safeHref(data.website) : null);
     const eventAt = (ev) => ev.at || toAt(parseClock(ev.time));
     const host = (url) => {
         try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
@@ -43,8 +47,8 @@
         </section>
     {/if}
 
-    {#if data.file}
-        <a class="item link" class:changed={changed.includes("file")} href={data.file} target="_blank" rel="noopener noreferrer">
+    {#if fileHref}
+        <a class="item link" class:changed={changed.includes("file")} href={fileHref} target="_blank" rel="noopener noreferrer">
             <span class="icon big" translate="no" aria-hidden="true">description</span>
             <span class="link-text">
                 <span class="link-title">Slides and documents</span>
@@ -54,8 +58,8 @@
         </a>
     {/if}
 
-    {#if data.youtube}
-        <a class="item link" class:changed={changed.includes("youtube")} href={youtubeUrl(data.youtube)} target="_blank" rel="noopener noreferrer">
+    {#if youtubeHref}
+        <a class="item link" class:changed={changed.includes("youtube")} href={youtubeHref} target="_blank" rel="noopener noreferrer">
             <span class="icon big" translate="no" aria-hidden="true">smart_display</span>
             <span class="link-text">
                 <span class="link-title">Watch the video</span>
@@ -65,12 +69,12 @@
         </a>
     {/if}
 
-    {#if data.website}
-        <a class="item link" class:changed={changed.includes("website")} href={data.website} target="_blank" rel="noopener noreferrer">
+    {#if websiteHref}
+        <a class="item link" class:changed={changed.includes("website")} href={websiteHref} target="_blank" rel="noopener noreferrer">
             <span class="icon big" translate="no" aria-hidden="true">language</span>
             <span class="link-text">
                 <span class="link-title">Open link</span>
-                <span class="link-sub">{host(data.website)}</span>
+                <span class="link-sub">{host(websiteHref)}</span>
             </span>
             <span class="icon" translate="no" aria-hidden="true">open_in_new</span>
         </a>

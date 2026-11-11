@@ -3,7 +3,7 @@
 
 import { liveshareData } from "$lib/liveshare.svelte.js";
 import { parseClock, toAt, formatClock, prefersHour12 } from "$lib/time.js";
-import { drivePreviewLink, youtubeId, normalizeUrl } from "$lib/links.js";
+import { drivePreviewLink, youtubeId, youtubeWatchUrl, normalizeUrl } from "$lib/links.js";
 
 export const CONTENT = [
     { key: "announcement", label: "Announcement", icon: "campaign", hint: "A short message at the top of every attendee's screen." },
@@ -57,7 +57,7 @@ export function buildValue(key) {
             return drivePreviewLink(drafts.file);
         case "youtube": {
             const id = youtubeId(drafts.youtube);
-            return id ? { url: drafts.youtube.trim(), embedUrl: `https://www.youtube.com/embed/${id}` } : null;
+            return id ? { url: youtubeWatchUrl(id), embedUrl: `https://www.youtube.com/embed/${id}` } : null;
         }
         case "website":
             return normalizeUrl(drafts.website);

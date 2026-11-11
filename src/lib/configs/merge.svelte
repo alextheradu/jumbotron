@@ -147,7 +147,9 @@
         <p class="message ok" role="status" transition:slide={{ duration: 200 }}>{mergeMessage}</p>
     {/if}
 
-    {#if !state}
+    {#if !state && org.error}
+        <p class="message error" role="alert">{org.error} Retrying automatically.</p>
+    {:else if !state}
         <p class="hint">Loading merge status</p>
 
     {:else if isBridged}
