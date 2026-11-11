@@ -76,3 +76,12 @@ You will also need to talk to someone with access to the backend on updating the
 
 
 
+
+### Big screen and demo time
+
+In the console, **Big screen → Open** opens `/screen`. Move that tab to the laptop plugged into the projector and press Full screen. It signs in with the organizer login saved on that device.
+
+- **Show announcements** puts the current announcement and "up next" on the projector. Turn it off and the screen shows only the event name and join link.
+- **Demo time** lets attendees share their screen. The big screen shows a 4-digit screen code. A presenter opens the attendee page on their laptop, taps **Share my screen**, enters their name and that code, then picks a window. The code changes after each presenter. Organizers can see who is presenting and stop them from the console.
+
+The video goes peer-to-peer (WebRTC) from the presenter's laptop to the projector tab. The backend only checks the code and relays the connection handshake. Some venue wifi blocks direct connections between devices. If shares get stuck on "Connecting", set `ICE_SERVERS` on the backend to a JSON array that includes a TURN server. Phones can't share their screen from a browser, so presenters need a laptop.

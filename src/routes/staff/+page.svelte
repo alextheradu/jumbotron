@@ -5,7 +5,7 @@
     import { eventName } from "$lib/event";
     import { internal, liveshareData } from "$lib/liveshare.svelte.js";
     import { CONTENT, hydrateDrafts } from "$lib/console/drafts.svelte.js";
-    import { org, connectOrgStream, disconnectOrgStream } from "$lib/org.svelte.js";
+    import { API, org, connectOrgStream, disconnectOrgStream } from "$lib/org.svelte.js";
 
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
@@ -14,12 +14,13 @@
     import ShareCard from "$lib/console/ShareCard.svelte";
     import SetupCard from "$lib/console/SetupCard.svelte";
     import SourceList from "$lib/console/SourceList.svelte";
+    import DemoCard from "$lib/console/DemoCard.svelte";
     import Editor from "$lib/console/Editor.svelte";
     import Toasts from "$lib/console/Toasts.svelte";
     import AdminPanel from "$lib/console/AdminPanel.svelte";
     import Merge from "$lib/configs/merge.svelte";
 
-    const API = "https://api.jumbotron.hackclub.com";
+
 
     let ready = $state(false);
     let isAdmin = $state(false);
@@ -213,7 +214,10 @@
 
         {#if internal.initComplete}
             <main class="workspace" in:fade={{ duration: 150 }}>
-                <div class="panel pane-list"><SourceList {selected} onselect={select} /></div>
+                <div class="panel pane-list">
+                    <SourceList {selected} onselect={select} />
+                    <DemoCard />
+                </div>
 
                 <div class="panel pane-editor" bind:this={editorEl}>
                     {#key selected}
