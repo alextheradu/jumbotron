@@ -279,7 +279,9 @@
     <h4 id="code">{internal.code}</h4>
     <p class="live" class:offline={!org.connected}>{org.connected ? "Live" : "Reconnecting..."}</p>
 
-    {#if !state}
+    {#if !state && org.error}
+        <p class="error-msg" style="font-family: Atkinson Hyperlegible Mono">{org.error} Retrying automatically...</p>
+    {:else if !state}
         <p>Loading merge status...</p>
     {:else if isBridged}
         <p>Merged into <strong>{state.root.name}</strong>'s event{state.root.cityName ? ` (${state.root.cityName})` : ""}, code <strong>{state.root.code}</strong>.</p>
