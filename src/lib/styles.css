@@ -7,43 +7,52 @@
  */
 
 :root {
-  /* ---- Event theme: Haven, the forest at dusk ----
-     Scene: an overnight hackathon, lights dimmed for the projector, organizers on laptops and
-     attendees on phones. Panels are the dark of the woods; color comes from the painting's
-     leaves, one color per kind of content so it can be recognised at a glance. */
+  /* ---- Theme: Hack Club ----
+     White panels and the official Hack Club palette (assets.hackclub.com/theme). The event
+     artwork is the backdrop; each kind of content keeps one Hack Club color everywhere. */
 
-  --bg: oklch(0.205 0.030 152);            /* deepest forest, under everything */
-  --surface: oklch(0.250 0.034 152);       /* panels */
-  --surface-raised: oklch(0.300 0.034 150);/* hover, selected rows */
-  --surface-sunken: oklch(0.205 0.028 152);/* inputs, wells */
-  --line: oklch(0.345 0.030 150);
-  --line-strong: oklch(0.460 0.032 145);
+  /* Hack Club palette */
+  --red: #ec3750;
+  --orange: #ff8c37;
+  --yellow: #f1c40f;
+  --green: #33d6a6;
+  --cyan: #5bc0de;
+  --blue: #338eda;
+  --purple: #a633d6;
 
-  --ink: oklch(0.955 0.022 88);            /* moonlit paper */
-  --ink-2: oklch(0.835 0.030 100);
-  --ink-3: oklch(0.690 0.032 115);
-  --on-art: oklch(0.975 0.015 88);
-  --ink-dark: oklch(0.220 0.040 40);       /* text on the bright leaf colors */
+  --bg: #f9fafc;                           /* snow */
+  --surface: #ffffff;                      /* panels */
+  --surface-raised: #f4f6f9;               /* hover, selected rows */
+  --surface-sunken: #f0f3f7;               /* inputs, wells */
+  --line: #e0e6ed;                         /* smoke */
+  --line-strong: #c9d2dc;
 
-  /* Leaf colors, taken from the artwork */
-  --ember: oklch(0.720 0.165 48);          /* canopy orange: announcements, primary actions */
-  --amber: oklch(0.845 0.140 82);          /* sunlit leaves: up next */
-  --sky: oklch(0.780 0.090 225);           /* dusk sky: documents */
-  --berry: oklch(0.700 0.150 8);           /* rowan berries: video */
-  --lichen: oklch(0.830 0.120 118);        /* lichen: links */
+  --ink: #1f2d3d;                          /* black */
+  --ink-2: #3c4858;                        /* slate */
+  --ink-3: #8492a6;                        /* muted */
+  --on-art: #ffffff;
+  --on-color: #ffffff;                     /* text and icons on a palette color */
+  --orange-ink: #c4570b;                   /* orange that reads as text on white */
 
-  --accent: var(--ember);
-  --accent-strong: oklch(0.670 0.175 44);
-  --accent-ink: var(--ink-dark);
-  --accent-wash: oklch(0.720 0.165 48 / 0.16);
+  /* One color per kind of content, used by the console and attendee views */
+  --c-announcement: var(--red);
+  --c-event: var(--blue);
+  --c-file: var(--cyan);
+  --c-youtube: var(--purple);
+  --c-website: var(--green);
 
-  --live: oklch(0.720 0.170 148);
-  --live-wash: oklch(0.720 0.170 148 / 0.16);
-  --danger: oklch(0.700 0.180 25);
-  --danger-wash: oklch(0.700 0.180 25 / 0.16);
-  --focus: var(--amber);
+  --accent: var(--red);
+  --accent-strong: #d42f46;
+  --accent-ink: var(--on-color);
+  --accent-wash: rgb(236 55 80 / 0.1);
 
-  --scrim: oklch(0.160 0.030 150 / 0.55);  /* overlay on art */
+  --live: var(--green);
+  --live-wash: rgb(51 214 166 / 0.14);
+  --danger: var(--red);
+  --danger-wash: rgb(236 55 80 / 0.1);
+  --focus: var(--blue);
+
+  --scrim: rgb(20 24 32 / 0.35);           /* overlay on art */
 
   --font-display: "Darumadrop One", "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --font-text: "Atkinson Hyperlegible Next", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -54,14 +63,14 @@
   --radius-l: 22px;
   --radius-pill: 999px;
 
-  --shadow-1: 0 1px 2px oklch(0.12 0.03 150 / 0.30);
-  --shadow-2: 0 2px 6px oklch(0.12 0.03 150 / 0.30), 0 18px 40px oklch(0.12 0.03 150 / 0.40);
+  --shadow-1: 0 1px 2px rgb(31 45 61 / 0.08), 0 2px 4px rgb(31 45 61 / 0.06);
+  --shadow-2: 0 1px 2px rgb(31 45 61 / 0.08), 0 12px 32px rgb(31 45 61 / 0.18);
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* ease-out-quint */
   --dur-1: 140ms;
   --dur-2: 260ms;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -143,13 +152,13 @@ a { color: inherit; text-underline-offset: 3px; }
 }
 
 .btn-primary { --btn-bg: var(--accent); --btn-ink: var(--accent-ink); --btn-ring: transparent; }
-.btn-destructive { --btn-bg: transparent; --btn-ink: var(--danger); --btn-ring: oklch(0.70 0.18 25 / 0.55); }
+.btn-destructive { --btn-bg: transparent; --btn-ink: var(--danger); --btn-ring: rgb(236 55 80 / 0.45); }
 .btn-destructive:hover { --btn-bg: var(--danger-wash); filter: none; }
-.btn-danger { --btn-bg: var(--danger); --btn-ink: var(--ink-dark); --btn-ring: transparent; }
+.btn-danger { --btn-bg: var(--danger); --btn-ink: var(--on-color); --btn-ring: transparent; }
 .btn-quiet { --btn-bg: transparent; --btn-ink: var(--ink-2); --btn-ring: transparent; padding: 0 0.7rem; }
 .btn-quiet:hover { --btn-bg: var(--surface-raised); filter: none; }
-.btn-on-art { --btn-bg: oklch(0.16 0.03 150 / 0.62); --btn-ink: var(--on-art); --btn-ring: oklch(1 0 0 / 0.14); }
-.btn-on-art:hover { --btn-bg: oklch(0.16 0.03 150 / 0.8); filter: none; }
+.btn-on-art { --btn-bg: rgb(20 24 32 / 0.55); --btn-ink: var(--on-art); --btn-ring: oklch(1 0 0 / 0.14); }
+.btn-on-art:hover { --btn-bg: rgb(20 24 32 / 0.72); filter: none; }
 .btn-small { min-height: 36px; padding: 0 0.85rem; font-size: 0.86rem; border-radius: 10px; }
 
 /* ---------- Fields ---------- */

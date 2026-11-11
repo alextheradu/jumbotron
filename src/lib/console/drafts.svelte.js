@@ -7,14 +7,14 @@ import { drivePreviewLink, youtubeId, youtubeWatchUrl, normalizeUrl } from "$lib
 
 // `color` is the leaf color for that kind of content, shared by the console and attendee views.
 export const CONTENT = [
-    { key: "announcement", label: "Announcement", icon: "campaign", color: "var(--ember)", hint: "A short message at the top of every attendee's screen." },
-    { key: "event", label: "Up next", icon: "schedule", color: "var(--amber)", hint: "The next thing on the schedule, with a live countdown." },
-    { key: "file", label: "Slides or document", icon: "description", color: "var(--sky)", hint: "A Google Drive file attendees can read at their own pace." },
-    { key: "youtube", label: "YouTube video", icon: "smart_display", color: "var(--berry)", hint: "A video attendees can open on their phone." },
-    { key: "website", label: "Link", icon: "language", color: "var(--lichen)", hint: "A sign-up form, the schedule, a submission page." }
+    { key: "announcement", label: "Announcement", icon: "campaign", color: "var(--c-announcement)", hint: "A short message at the top of every attendee's screen." },
+    { key: "event", label: "Up next", icon: "schedule", color: "var(--c-event)", hint: "The next thing on the schedule, with a live countdown." },
+    { key: "file", label: "Slides or document", icon: "description", color: "var(--c-file)", hint: "A Google Drive file attendees can read at their own pace." },
+    { key: "youtube", label: "YouTube video", icon: "smart_display", color: "var(--c-youtube)", hint: "A video attendees can open on their phone." },
+    { key: "website", label: "Link", icon: "language", color: "var(--c-website)", hint: "A sign-up form, the schedule, a submission page." }
 ];
 
-export const colorFor = (key) => CONTENT.find((c) => c.key === key)?.color ?? "var(--ember)";
+export const colorFor = (key) => CONTENT.find((c) => c.key === key)?.color ?? "var(--c-announcement)";
 
 export const labelFor = (key) => CONTENT.find((c) => c.key === key)?.label ?? key;
 

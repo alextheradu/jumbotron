@@ -102,12 +102,12 @@
         font-size: 1.3rem;
         transition: background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
     }
-    li.live .swatch { background: var(--c); color: var(--ink-dark); }
+    li.live .swatch { background: var(--c); color: var(--on-color); }
     .text { min-width: 0; display: grid; }
     .label { font-weight: 700; }
     .sub { color: var(--ink-3); font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     li.live .sub { color: var(--ink-2); }
-    .sub.edited { color: var(--amber); }
+    .sub.edited { color: var(--orange-ink); }
 
     .hint { padding: 4px 6px 0; }
 </style>

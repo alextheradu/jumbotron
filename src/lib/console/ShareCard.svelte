@@ -50,8 +50,8 @@
         align-content: center;
         gap: 2px;
         padding: 16px 24px;
-        background: var(--ember);
-        color: var(--ink-dark);
+        background: var(--red);
+        color: var(--on-color);
     }
     .label { font-size: 0.82rem; font-weight: 700; }
     .code { font-size: 2.8rem; font-weight: 700; letter-spacing: 0.1em; line-height: 1; }
@@ -82,7 +82,7 @@
         font-weight: 700;
         font-size: 0.85rem;
     }
-    .copy.done .copy-label { background: var(--live); color: var(--ink-dark); }
+    .copy.done .copy-label { background: var(--live); color: var(--on-color); }
     .open {
         display: inline-flex;
         align-items: center;

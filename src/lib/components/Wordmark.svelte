@@ -12,8 +12,8 @@
         display: inline-flex;
         align-items: center;
         gap: 0.4em;
-        font: 800 2.25rem/1 var(--font-text);
-        letter-spacing: -0.02em;
+        /* Same as the original wordmark: Host Grotesk at weight 900 (the h1 weight), 40px */
+        font: 900 40px/1 "Host Grotesk", var(--font-text);
         color: var(--ink);
         user-select: none;
     }

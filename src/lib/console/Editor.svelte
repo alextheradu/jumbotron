@@ -112,7 +112,7 @@
         color: var(--c);
         font-size: 1.7rem;
     }
-    .swatch.live { background: var(--c); color: var(--ink-dark); }
+    .swatch.live { background: var(--c); color: var(--on-color); }
     .titles { flex: 1; min-width: 0; }
     h2 { font-size: 1.5rem; letter-spacing: -0.01em; }
     .titles .hint { margin-top: 2px; }
@@ -126,8 +126,8 @@
         font-size: 0.82rem;
         font-weight: 700;
     }
-    .state.live { background: var(--c); color: var(--ink-dark); }
-    .state.edited { background: var(--accent-wash); color: var(--amber); }
+    .state.live { background: var(--c); color: var(--on-color); }
+    .state.edited { background: var(--accent-wash); color: var(--orange-ink); }
 
     .fields { display: grid; gap: 16px; max-width: 640px; }
     .big { font-size: 1.2rem; font-weight: 700; }

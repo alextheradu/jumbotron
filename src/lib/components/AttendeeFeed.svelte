@@ -20,9 +20,9 @@
 
     let links = $derived(
         [
-            fileHref && { key: "file", href: fileHref, icon: "description", color: "var(--sky)", title: "Slides and documents", sub: "Read at your own pace" },
-            youtubeHref && { key: "youtube", href: youtubeHref, icon: "smart_display", color: "var(--berry)", title: "Watch the video", sub: "Opens on YouTube" },
-            websiteHref && { key: "website", href: websiteHref, icon: "language", color: "var(--lichen)", title: "Open link", sub: host(websiteHref) }
+            fileHref && { key: "file", href: fileHref, icon: "description", color: "var(--c-file)", title: "Slides and documents", sub: "Read at your own pace" },
+            youtubeHref && { key: "youtube", href: youtubeHref, icon: "smart_display", color: "var(--c-youtube)", title: "Watch the video", sub: "Opens on YouTube" },
+            websiteHref && { key: "website", href: websiteHref, icon: "language", color: "var(--c-website)", title: "Open link", sub: host(websiteHref) }
         ].filter(Boolean)
     );
 
@@ -39,7 +39,7 @@
     {/if}
 
     {#if data.announcement}
-        <section class="block" style:--c="var(--ember)" class:changed={changed.includes("announcement")} aria-label="Announcement">
+        <section class="block" style:--c="var(--c-announcement)" class:changed={changed.includes("announcement")} aria-label="Announcement">
             <p class="kind"><span class="icon" translate="no" aria-hidden="true">campaign</span>Announcement
                 {#if changed.includes("announcement")}<span class="new">New</span>{/if}</p>
             {#if data.announcement.title}<h2>{data.announcement.title}</h2>{/if}
@@ -49,7 +49,7 @@
 
     {#if data.event}
         {@const rel = relativeToNow(eventAt(data.event), now)}
-        <section class="block" style:--c="var(--amber)" class:changed={changed.includes("event")} aria-label="Up next">
+        <section class="block" style:--c="var(--c-event)" class:changed={changed.includes("event")} aria-label="Up next">
             <p class="kind"><span class="icon" translate="no" aria-hidden="true">schedule</span>Up next
                 {#if changed.includes("event")}<span class="new">New</span>{/if}</p>
             <h2>{data.event.title}</h2>
@@ -83,7 +83,7 @@
         padding: 20px 22px 22px;
         border-radius: var(--radius-l);
         background: var(--c);
-        color: var(--ink-dark);
+        color: var(--on-color);
     }
     .kind {
         display: flex;
@@ -98,7 +98,7 @@
         margin-left: auto;
         padding: 2px 10px;
         border-radius: var(--radius-pill);
-        background: var(--ink-dark);
+        background: var(--on-color);
         color: var(--c);
         font-size: 0.75rem;
     }
@@ -116,8 +116,8 @@
     .rel {
         padding: 4px 12px;
         border-radius: var(--radius-pill);
-        background: var(--ink-dark);
-        color: var(--amber);
+        background: rgb(255 255 255 / 0.22);
+        color: var(--on-color);
         font-weight: 700;
         font-size: 0.9rem;
     }
@@ -145,7 +145,7 @@
         place-items: center;
         border-radius: 13px;
         background: var(--c);
-        color: var(--ink-dark);
+        color: var(--on-color);
         font-size: 1.5rem;
     }
     .link-text { flex: 1; display: grid; gap: 2px; min-width: 0; }

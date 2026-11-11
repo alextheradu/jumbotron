@@ -51,7 +51,7 @@
         padding: 10px 10px 10px 18px;
         border-radius: var(--radius-m);
         background: var(--ink);
-        color: var(--ink-dark);
+        color: var(--surface);
         box-shadow: var(--shadow-2);
         pointer-events: auto;
     }

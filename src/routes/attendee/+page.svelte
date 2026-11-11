@@ -114,7 +114,7 @@
     <title>{eventName}{cityName ? ` ${cityName}` : ""} · Jumbotron</title>
 </svelte:head>
 
-<Backdrop trees={false} scrim={0.5} />
+<Backdrop trees={false} scrim={0.35} />
 
 <div class="page">
     <header>
@@ -181,7 +181,7 @@
         font-family: var(--font-display);
         font-weight: 400;
         font-size: clamp(2.2rem, 9vw, 3.4rem);
-        text-shadow: 0 2px 18px oklch(0.12 0.03 150 / 0.5);
+        text-shadow: 0 2px 18px rgb(20 24 32 / 0.45);
         text-wrap: balance;
     }
 
@@ -192,7 +192,7 @@
         gap: 6px;
         padding: 4px 10px;
         border-radius: var(--radius-pill);
-        background: oklch(0.16 0.03 150 / 0.6);
+        background: rgb(20 24 32 / 0.55);
         font-size: 0.85rem;
         font-weight: 700;
     }

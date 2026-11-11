@@ -46,7 +46,7 @@
     .scrim {
         position: absolute;
         inset: 0;
-        background: oklch(0.2 0.05 25 / var(--scrim-alpha));
+        background: rgb(20 24 32 / var(--scrim-alpha));
     }
     .mascot {
         position: absolute;

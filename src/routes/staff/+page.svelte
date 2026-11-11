@@ -126,7 +126,7 @@
     <title>Organizer console · Jumbotron</title>
 </svelte:head>
 
-<Backdrop trees={false} scrim={0.5} />
+<Backdrop trees={false} scrim={0.35} />
 
 <div class="shell">
     <header class="topbar">
@@ -259,7 +259,7 @@
         display: inline-flex;
         padding: 4px;
         border-radius: var(--radius-pill);
-        background: oklch(0.16 0.03 150 / 0.6);
+        background: rgb(20 24 32 / 0.55);
     }
     .view-switch button {
         min-height: 34px;
@@ -272,7 +272,7 @@
         font-size: 0.9rem;
         cursor: pointer;
     }
-    .view-switch button[aria-pressed="true"] { background: var(--ink); color: var(--ink-dark); }
+    .view-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
     .count-badge {
         display: inline-grid;
         place-items: center;
@@ -281,8 +281,8 @@
         margin-left: 6px;
         padding: 0 5px;
         border-radius: var(--radius-pill);
-        background: var(--ember);
-        color: var(--ink-dark);
+        background: var(--red);
+        color: var(--on-color);
         font-size: 0.72rem;
     }
 
@@ -290,8 +290,8 @@
     .notice {
         padding: 12px 16px;
         border-radius: var(--radius-m);
-        background: var(--amber);
-        color: var(--ink-dark);
+        background: var(--yellow);
+        color: var(--ink);
         font-weight: 700;
     }
 
@@ -314,7 +314,7 @@
         font-weight: 400;
         font-size: clamp(2.6rem, 6vw, 4.4rem);
         line-height: 1;
-        text-shadow: 0 2px 18px oklch(0.12 0.03 150 / 0.5);
+        text-shadow: 0 2px 18px rgb(20 24 32 / 0.45);
     }
     .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
