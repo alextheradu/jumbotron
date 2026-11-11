@@ -132,7 +132,7 @@
     <header class="topbar">
         <div class="brand">
             <Wordmark onArt size="s" />
-            <span class="product">Organizer</span>
+            <span class="product">Organizer console</span>
         </div>
 
         {#if isAdmin || internal.initComplete}
@@ -249,8 +249,8 @@
         padding: 16px 0;
         color: var(--on-art);
     }
-    .brand { display: flex; align-items: baseline; gap: 10px; }
-    .product { font-weight: 700; opacity: 0.8; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .product { padding-left: 12px; border-left: 1px solid rgb(255 255 255 / 0.4); font-size: 1rem; font-weight: 700; line-height: 1.2; opacity: 0.9; }
     .account { justify-self: end; display: flex; align-items: center; gap: 10px; }
     .account img { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-sunken); }
     .name { font-weight: 700; }
