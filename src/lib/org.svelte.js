@@ -1,6 +1,7 @@
 import { internal } from "$lib/liveshare.svelte";
 
-export const API = "https://api.jumbotron.hackclub.com";
+// VITE_API points a local build at a local backend.
+export const API = import.meta.env.VITE_API || "https://api.jumbotron.hackclub.com";
 
 // `state` mirrors the server's mergeState(): { code, role, root, members, incoming, outgoing }
 export const org = $state({
@@ -10,6 +11,21 @@ export const org = $state({
     notice: "",
     error: ""        // set when merge state can't be loaded, so the panel never spins forever
 });
+
+// The big screen and demo time (participant screenshare), mirrored from the server's demoState():
+// `board` shows announcements on the big screen; presenter is { id, name, live } or null, and
+// `live` is false until they've picked a window.
+export const demo = $state({
+    enabled: false,
+    board: true,
+    screenCode: null,
+    screenOpen: false,
+    presenter: null
+});
+
+export function applyDemo(next) {
+    if (next) Object.assign(demo, next);
+}
 
 const nameOf = (e) => (e && e.name) || "Another organizer";
 // `|| []` rather than default params: callers pass `prev && prev.x`, which is null (not
@@ -80,7 +96,7 @@ let session = 0;                 // bumped on connect/disconnect only: outlives 
 
 // POSTs the credentials (never in the URL) plus `body`. Resolves with { res, data } for any
 // HTTP answer; rejects with a sentence for the user when there is no answer in time.
-async function request(path, body = {}) {
+export async function request(path, body = {}) {
     let res;
     try {
         res = await fetch(`${API}${path}`, {
@@ -184,6 +200,8 @@ async function openStream() {
 
         if (msg.type === "state") {
             applyState(msg.state, msg.reason);
+        } else if (msg.type === "demo") {
+            applyDemo(msg.demo);
         } else if (msg.type === "revoked") {
             signOutNow();
         } else if (msg.type === "reset") {
@@ -253,3 +271,13 @@ export const cancelMergeRequest = () => post("/cancelMergeRequest");
 export const respondMergeRequest = (requester, accept) => post("/respondMergeRequest", { requester, accept });
 export const removeMember = (target) => post("/unmerge", { target });
 export const leaveMerge = () => post("/unmerge");
+
+async function demoPost(path, body) {
+    const data = await post(path, body);
+    applyDemo(data.demo);
+    return data;
+}
+
+export const setDemos = (enabled) => demoPost("/demoSet", { enabled });
+export const setBoard = (board) => demoPost("/demoSet", { board });
+export const stopPresenter = () => demoPost("/demoStop");

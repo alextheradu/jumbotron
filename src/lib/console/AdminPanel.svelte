@@ -1,8 +1,9 @@
 <script>
     import { onMount } from "svelte";
     import { internal } from "$lib/liveshare.svelte.js";
+    import { API } from "$lib/org.svelte.js";
 
-    const API = "https://api.jumbotron.hackclub.com";
+
     // Credentials always travel in a POST body, never in the URL.
     const authedPost = (path) =>
         fetch(`${API}${path}`, {

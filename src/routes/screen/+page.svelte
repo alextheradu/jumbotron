@@ -1,0 +1,423 @@
+<script>
+    // The big screen: the tab an organizer drags onto the projector. Shows the announcement and
+    // what's up next (when the board is on); during demo time it shows the code to type, then the
+    // presenter's screen.
+    // Opened from the console, so it signs in with the organizer credentials saved on this device.
+    import { resolve } from "$app/paths";
+    import { onMount } from "svelte";
+    import { fade } from "svelte/transition";
+    import { eventName } from "$lib/event";
+    import { internal } from "$lib/liveshare.svelte.js";
+    import { API, request } from "$lib/org.svelte.js";
+    import { relativeToNow, parseClock, toAt } from "$lib/time.js";
+    import Backdrop from "$lib/components/Backdrop.svelte";
+    import Wordmark from "$lib/components/Wordmark.svelte";
+
+    let status = $state("loading"); // loading | signedout | ready | replaced
+    let connected = $state(false);
+    let cityName = $state("");
+    let content = $state({ announcement: null, event: null });
+    let demo = $state({ enabled: false, board: true, screenCode: null, presenter: null });
+    let playing = $state(false);   // the presenter's video has frames
+    let muted = $state(false);     // the browser refused sound until someone clicks
+    let isFullscreen = $state(false);
+    let slow = $state(false);      // presenter picked a window but no video after a while
+    let idle = $state(false);      // no mouse movement lately: hide the cursor and the buttons
+    let now = $state(new Date());
+    let video = $state();
+
+    let iceServers = [];
+    let feed = null;       // public content, the same stream attendees get
+    let control = null;    // demo state and the presenter's half of the handshake
+    let retry = null;
+    let pc = null;
+    let pcFor = null;      // presenter id the current connection belongs to
+    let queue = Promise.resolve();
+    let wakeLock = null;
+    let idleTimer = null;
+
+    let joinLink = $derived(`jumbotron.hackclub.com/?code=${internal.code ?? ""}`);
+    let presenter = $derived(demo.enabled ? demo.presenter : null);
+    let board = $derived(demo.board !== false);
+    const eventAt = (ev) => ev.at || toAt(parseClock(ev.time));
+
+    function openFeed() {
+        feed?.close();
+        feed = new EventSource(`${API}/getSession?code=${encodeURIComponent(internal.code)}`);
+        feed.onmessage = (event) => {
+            try {
+                const payload = JSON.parse(event.data);
+                if (payload.cityName) cityName = payload.cityName;
+                const data = typeof payload.data === "string" ? JSON.parse(payload.data) : payload.data;
+                content = { announcement: data?.announcement || null, event: data?.event || null };
+            } catch {
+                // The next message carries the full state again.
+            }
+        };
+    }
+
+    // Same ticket dance as the console: credentials go in a POST body, never in a stream URL.
+    async function openControl() {
+        clearTimeout(retry);
+        control?.close();
+        control = null;
+        connected = false;
+        let ticket;
+        try {
+            const { res, data } = await request("/streamTicket");
+            if (res.status === 401) {
+                status = "signedout";
+                return;
+            }
+            if (!res.ok || !data.ticket) throw new Error();
+            ticket = data.ticket;
+        } catch {
+            retry = setTimeout(openControl, 5000);
+            return;
+        }
+
+        const es = (control = new EventSource(`${API}/screenStream?ticket=${encodeURIComponent(ticket)}`));
+        es.onopen = () => {
+            if (es === control) connected = true;
+        };
+        es.onmessage = (event) => {
+            if (es !== control) return;
+            let msg;
+            try { msg = JSON.parse(event.data); } catch { return; }
+            if (msg.type === "hello") iceServers = msg.iceServers || [];
+            else if (msg.type === "demo") applyDemo(msg.demo);
+            else if (msg.type === "signal") queue = queue.then(() => onSignal(msg)).catch(() => {});
+            else if (msg.type === "replaced") {
+                // Another tab is the big screen now. Don't fight it for the slot.
+                es.close();
+                control = null;
+                closePeer();
+                status = "replaced";
+            } else if (msg.type === "revoked") {
+                es.close();
+                status = "signedout";
+            }
+        };
+        es.onerror = () => {
+            if (es !== control) return;
+            // A used ticket can't reconnect; get a fresh one. A live video keeps playing meanwhile.
+            es.close();
+            connected = false;
+            retry = setTimeout(openControl, 3000);
+        };
+    }
+
+    function applyDemo(next) {
+        demo = next;
+        if (!next.enabled || !next.presenter || next.presenter.id !== pcFor) closePeer();
+    }
+
+    function closePeer() {
+        pc?.close();
+        pc = null;
+        pcFor = null;
+        playing = false;
+        muted = false;
+        if (video) video.srcObject = null;
+    }
+
+    async function onSignal({ from, signal }) {
+        if (!demo.presenter || demo.presenter.id !== from) return;
+
+        if (signal.description?.type === "offer") {
+            closePeer();
+            const peer = (pc = new RTCPeerConnection({ iceServers }));
+            pcFor = from;
+            const reply = (body) => request("/demoSignal", { to: from, signal: body }).catch(() => {});
+            peer.onicecandidate = (e) => {
+                if (e.candidate && peer === pc) reply({ candidate: e.candidate });
+            };
+            peer.ontrack = (e) => {
+                if (peer === pc) show(e.streams[0]);
+            };
+            await peer.setRemoteDescription(signal.description);
+            await peer.setLocalDescription(await peer.createAnswer());
+            await reply({ description: peer.localDescription });
+        } else if (signal.candidate && pc && pcFor === from) {
+            await pc.addIceCandidate(signal.candidate);
+        }
+    }
+
+    async function show(stream) {
+        if (!video || video.srcObject === stream) return;
+        video.srcObject = stream;
+        video.muted = false;
+        try {
+            await video.play();
+        } catch {
+            // Autoplay with sound needs a click on this tab first; silent video never does.
+            video.muted = true;
+            muted = true;
+            video.play().catch(() => {});
+        }
+    }
+
+    function unmute() {
+        if (!video) return;
+        video.muted = false;
+        muted = false;
+    }
+
+    // A presenter stuck connecting usually means the wifi blocks device-to-device traffic.
+    $effect(() => {
+        slow = false;
+        if (!presenter?.live || playing) return;
+        const timer = setTimeout(() => (slow = true), 20000);
+        return () => clearTimeout(timer);
+    });
+
+    function wake() {
+        idle = false;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => (idle = true), 2500);
+    }
+
+    function goFullscreen() {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+
+    async function stayAwake() {
+        try {
+            wakeLock = await navigator.wakeLock?.request("screen");
+        } catch {
+            // Not supported or not allowed; the projector may dim, nothing else breaks.
+        }
+    }
+
+    onMount(() => {
+        let creds;
+        try { creds = JSON.parse(localStorage.getItem("creds")); } catch { creds = null; }
+        if (!Array.isArray(creds)) {
+            status = "signedout";
+            return;
+        }
+        [internal.code, internal.slack, internal.name, internal.password] = creds;
+        cityName = localStorage.getItem("cityName") || "";
+        status = "ready";
+
+        openFeed();
+        openControl();
+        stayAwake();
+        wake();
+
+        const clock = setInterval(() => (now = new Date()), 30000);
+        const onFullscreen = () => (isFullscreen = !!document.fullscreenElement);
+        // The wake lock is dropped whenever the tab is hidden.
+        const onVisible = () => document.visibilityState === "visible" && stayAwake();
+        document.addEventListener("fullscreenchange", onFullscreen);
+        document.addEventListener("visibilitychange", onVisible);
+
+        return () => {
+            clearInterval(clock);
+            clearTimeout(retry);
+            clearTimeout(idleTimer);
+            document.removeEventListener("fullscreenchange", onFullscreen);
+            document.removeEventListener("visibilitychange", onVisible);
+            feed?.close();
+            control?.close();
+            closePeer();
+            wakeLock?.release?.().catch(() => {});
+        };
+    });
+</script>
+
+<svelte:head>
+    <title>Big screen · {eventName}{cityName ? ` ${cityName}` : ""}</title>
+</svelte:head>
+
+<svelte:window onpointermove={wake} onkeydown={wake} />
+
+<Backdrop scrim={0.4} />
+
+{#if status === "signedout" || status === "replaced"}
+    <main class="message">
+        <Wordmark onArt />
+        {#if status === "replaced"}
+            <h1>The big screen is open in another tab</h1>
+            <p>Only one tab can be the big screen. Close the other one, then reload this page.</p>
+            <button class="btn btn-on-art" onclick={() => location.reload()}>Use this tab</button>
+        {:else}
+            <h1>Open this from the organizer console</h1>
+            <p>The big screen uses your organizer sign-in on this device.</p>
+            <a class="btn btn-on-art" href={resolve("/")}>Go to Jumbotron</a>
+        {/if}
+    </main>
+{:else if status === "ready"}
+    <div class="screen" class:idle>
+        <header>
+            <Wordmark onArt />
+            <span class="join">Follow along at <strong class="mono" translate="no">{joinLink}</strong></span>
+        </header>
+
+        <main class="stage">
+            <h1>{eventName}{cityName ? ` ${cityName}` : ""}</h1>
+
+            {#if board && content.announcement}
+                <section class="card" style:--c="var(--c-announcement)" in:fade={{ duration: 200 }}>
+                    <p class="kind"><span class="icon" translate="no" aria-hidden="true">campaign</span>Announcement</p>
+                    {#if content.announcement.title}<h2>{content.announcement.title}</h2>{/if}
+                    {#if content.announcement.message}<p class="body">{content.announcement.message}</p>{/if}
+                </section>
+            {/if}
+
+            {#if board && content.event}
+                {@const rel = relativeToNow(eventAt(content.event), now)}
+                <section class="card" style:--c="var(--c-event)" in:fade={{ duration: 200 }}>
+                    <p class="kind"><span class="icon" translate="no" aria-hidden="true">schedule</span>Up next</p>
+                    <h2>{content.event.title}</h2>
+                    <p class="body"><span>{content.event.time}</span>{#if rel}<span class="rel"> · {rel}</span>{/if}</p>
+                </section>
+            {/if}
+        </main>
+
+        {#if demo.enabled && !presenter}
+            <aside class="airplay" in:fade={{ duration: 200 }}>
+                <span class="icon" translate="no" aria-hidden="true">cast</span>
+                <div class="how">
+                    <p class="how-title">Demo time: share your screen</p>
+                    <p>Open <strong class="mono" translate="no">{joinLink}</strong> on your laptop and tap Share my screen</p>
+                </div>
+                <div class="code-box">
+                    <span>Screen code</span>
+                    <strong class="mono" translate="no">{demo.screenCode ?? "····"}</strong>
+                </div>
+            </aside>
+        {/if}
+
+        {#if !isFullscreen && !idle}
+            <button class="btn btn-on-art fullscreen" transition:fade={{ duration: 150 }} onclick={goFullscreen}>
+                <span class="icon" translate="no" aria-hidden="true">fullscreen</span>Full screen
+            </button>
+        {/if}
+        {#if !connected}
+            <p class="offline" role="status">Reconnecting</p>
+        {/if}
+    </div>
+
+    <!-- Always mounted so the stream has somewhere to land the moment it arrives. -->
+    <div class="theatre" class:on={!!presenter} class:idle>
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <video bind:this={video} autoplay playsinline class:on={playing} onplaying={() => (playing = true)}></video>
+        {#if presenter}
+            {#if !playing}
+                <p class="waiting" role="status">
+                    <span class="spinner" aria-hidden="true"></span>
+                    {presenter.name} is {presenter.live ? "connecting" : "getting ready"}
+                </p>
+                {#if slow}
+                    <p class="slow">Still connecting. This network may block screen sharing between devices.</p>
+                {/if}
+            {/if}
+            <p class="nameplate"><span class="icon" translate="no" aria-hidden="true">present_to_all</span>{presenter.name}</p>
+            {#if muted}
+                <button class="btn btn-on-art unmute" onclick={unmute}>Click for sound</button>
+            {/if}
+        {/if}
+    </div>
+{/if}
+
+<style>
+    .message {
+        min-height: 100dvh;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 14px;
+        padding: 24px;
+        color: var(--on-art);
+        text-align: center;
+    }
+    .message h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(1.8rem, 4vw, 2.8rem); }
+    .message .btn { margin-top: 10px; text-decoration: none; }
+
+    /* Sized in vw/vh throughout: this page is read from across a room, on any projector. */
+    .screen {
+        min-height: 100dvh;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 3vh;
+        padding: 4vh 5vw;
+        color: var(--on-art);
+    }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
+    .join { padding: 0.5em 1em; border-radius: var(--radius-pill); background: rgb(20 24 32 / 0.55); font-size: clamp(1rem, 1.5vw, 1.7rem); }
+
+    .stage { display: grid; align-content: center; justify-items: center; gap: 3vh; text-align: center; }
+    h1 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(3rem, 9vw, 11rem);
+        line-height: 1;
+        text-shadow: 0 2px 18px rgb(20 24 32 / 0.45);
+        text-wrap: balance;
+    }
+    .card {
+        width: min(100%, 70vw);
+        display: grid;
+        gap: 0.6vh;
+        padding: 2.4vh 2.4vw;
+        border-radius: var(--radius-l);
+        background: var(--surface);
+        color: var(--ink);
+        box-shadow: var(--shadow-2), inset 0 6px 0 var(--c);
+        text-align: left;
+    }
+    .kind { display: flex; align-items: center; gap: 0.4em; color: var(--ink-2); font-size: clamp(0.9rem, 1.3vw, 1.5rem); font-weight: 700; }
+    .card h2 { font-size: clamp(1.6rem, 3.2vw, 4rem); text-wrap: balance; }
+    .body { font-size: clamp(1.1rem, 2vw, 2.4rem); color: var(--ink-2); white-space: pre-line; }
+    .rel { color: var(--ink-3); }
+
+    .airplay {
+        justify-self: center;
+        display: flex;
+        align-items: center;
+        gap: 2vw;
+        padding: 2vh 2.4vw;
+        border-radius: var(--radius-l);
+        background: rgb(20 24 32 / 0.72);
+        backdrop-filter: blur(14px);
+        font-size: clamp(1rem, 1.5vw, 1.8rem);
+    }
+    .airplay > .icon { font-size: 2.6em; }
+    .how { display: grid; gap: 0.2em; }
+    .how-title { font-weight: 800; font-size: 1.25em; }
+    .code-box { display: grid; justify-items: center; padding-left: 2vw; border-left: 1px solid rgb(255 255 255 / 0.3); font-weight: 700; }
+    .code-box strong { font-size: 3em; line-height: 1; letter-spacing: 0.12em; }
+
+    .idle { cursor: none; }
+    .fullscreen { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); opacity: 0.8; }
+    .fullscreen:hover { opacity: 1; }
+    .offline { position: fixed; left: 16px; bottom: 16px; padding: 6px 12px; border-radius: var(--radius-pill); background: rgb(20 24 32 / 0.72); color: var(--on-art); font-weight: 700; font-size: 0.85rem; }
+
+    .theatre { position: fixed; inset: 0; display: none; place-items: center; background: #000; color: var(--on-art); }
+    .theatre.on { display: grid; }
+    video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; }
+    video.on { opacity: 1; }
+    .waiting { display: flex; align-items: center; gap: 0.6em; font-size: clamp(1.4rem, 2.6vw, 3rem); font-weight: 700; }
+    .spinner { width: 1em; height: 1em; border: 0.14em solid rgb(255 255 255 / 0.3); border-top-color: var(--on-art); border-radius: 50%; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .slow { position: absolute; top: calc(50% + 3em); max-width: 40ch; text-align: center; color: rgb(255 255 255 / 0.75); font-size: clamp(1rem, 1.5vw, 1.8rem); }
+    .nameplate {
+        position: absolute;
+        left: 2vw;
+        bottom: 3vh;
+        display: flex;
+        align-items: center;
+        gap: 0.4em;
+        padding: 0.4em 0.9em;
+        border-radius: var(--radius-pill);
+        background: rgb(20 24 32 / 0.72);
+        font-size: clamp(1rem, 1.5vw, 1.8rem);
+        font-weight: 700;
+    }
+    .unmute { position: absolute; right: 2vw; bottom: 3vh; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .spinner { animation: none; }
+    }
+</style>

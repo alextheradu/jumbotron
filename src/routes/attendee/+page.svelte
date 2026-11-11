@@ -6,13 +6,16 @@
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
     import AttendeeFeed from "$lib/components/AttendeeFeed.svelte";
+    import ShareScreen from "$lib/components/ShareScreen.svelte";
     import { labelFor } from "$lib/console/drafts.svelte.js";
+    import { API } from "$lib/org.svelte.js";
 
     const KEYS = ["announcement", "event", "file", "youtube", "website"];
 
     let missing = $state(false);
     let cityName = $state("");
-    let code = "";
+    let code = $state("");
+    let demos = $state(false); // organizers have turned on demo time
     let connection = $state("connecting"); // connecting | live | reconnecting | offline
     let changed = $state([]);
     let announcement = $state(""); // screen-reader summary of what changed
@@ -53,7 +56,7 @@
     function connect() {
         source?.close();
         connection = connection === "live" ? "reconnecting" : "connecting";
-        source = new EventSource(`https://api.jumbotron.hackclub.com/getSession?code=${encodeURIComponent(code)}`, { withCredentials: true });
+        source = new EventSource(`${API}/getSession?code=${encodeURIComponent(code)}`, { withCredentials: true });
 
         source.onopen = () => (connection = "live");
         source.onerror = () => {
@@ -64,6 +67,7 @@
             try {
                 const payload = JSON.parse(event.data);
                 if (payload.cityName) cityName = payload.cityName;
+                demos = !!payload.demos;
                 parsePacket(payload.data);
             } catch {
                 // Ignore malformed messages; the next one will carry the full state.
@@ -81,6 +85,7 @@
         try {
             const saved = JSON.parse(sessionStorage.getItem("eventPacket"));
             cityName = saved?.cityName || "";
+            demos = !!saved?.demos;
             parsePacket(saved?.data, { quiet: true });
         } catch {
             // No cached packet; the stream will fill everything in.
@@ -152,6 +157,10 @@
             {/if}
 
             <p class="sr-only" aria-live="polite">{announcement}</p>
+
+            {#if demos}
+                <ShareScreen {code} />
+            {/if}
 
             <AttendeeFeed
                 data={liveshareData}
