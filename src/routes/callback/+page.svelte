@@ -2,63 +2,102 @@
     import { page } from "$app/state";
     import { resolve } from "$app/paths";
     import { onMount } from "svelte";
-    import { eventName } from "$lib/event";
+    import Backdrop from "$lib/components/Backdrop.svelte";
+    import Wordmark from "$lib/components/Wordmark.svelte";
 
-    let authCode = $state();
+    let errorText = $state("");
 
-    
     onMount(async () => {
         if (localStorage.getItem("creds")) {
-            window.location.replace(resolve("/staff"))
+            window.location.replace(resolve("/staff"));
             return;
         }
 
-        if (page.url.searchParams.get("code") == null) {
-            window.location.replace(resolve("/"))
-        }
-        authCode = page.url.searchParams.get("code");
-
-        const raw = await fetch("https://api.jumbotron.hackclub.com/genToken", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                "code": authCode
-            })
-        })
-        
-        if (!raw.ok) {
-            alert("Server error, try again soon!");
+        const authCode = page.url.searchParams.get("code");
+        if (!authCode) {
             window.location.replace(resolve("/"));
             return;
         }
-            
-        let data = await raw.json();
-        let creds = data.credentials;
-        if (data.sources) {
-             creds.push(JSON.stringify(data.sources));
+
+        try {
+            const raw = await fetch("https://api.jumbotron.hackclub.com/genToken", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: authCode })
+            });
+            const data = await raw.json().catch(() => ({}));
+
+            if (!raw.ok || !data.credentials) {
+                errorText = data.error
+                    ? `Hack Club Auth said: ${data.error}`
+                    : "We couldn't finish signing you in. Your account may not be verified or YSWS-eligible yet.";
+                return;
+            }
+
+            const creds = data.credentials;
+            if (data.sources) creds.push(JSON.stringify(data.sources));
+            localStorage.setItem("creds", JSON.stringify(creds));
+            window.location.replace(resolve("/staff"));
+        } catch {
+            errorText = "Can't reach Jumbotron right now. Check your connection and try again.";
         }
-        console.log(creds)
-        localStorage.setItem("creds", JSON.stringify(creds));
-        window.location.replace(resolve("/staff"));
-        return;
-        
-        
-    })
+    });
 </script>
+
 <svelte:head>
-    <title>Jumbotron - Authenticating User</title>
+    <title>Signing in · Jumbotron</title>
 </svelte:head>
-<header style:margin-bottom=30px>
-    <h1 style:user-select="none" style:font-size="40px" style:margin-top="45px">
-        <img 
-            style="max-height:40px; margin-left: 5px; margin-right: 5px; transform: translateY(5px); padding: 0; display:inline" 
-            src="https://assets.hackclub.com/icon-rounded.png" 
-            alt="" 
-        />
-        <span style:font-family="Host Grotesk, Montserrat" style:color="black">Jumbotron</span>
-    </h1>
-    <h2 style:margin-top=3px style:font-size=20px>{eventName} Organizer Console</h2>
-</header>
-<p>You will be automatically redirected</p>
+
+<Backdrop />
+
+<main>
+    <Wordmark onArt />
+    {#if errorText}
+        <div class="panel" role="alert">
+            <h1>Sign-in didn't work</h1>
+            <p>{errorText}</p>
+            <a class="btn btn-primary" href={resolve("/")}>Back to Jumbotron</a>
+        </div>
+    {:else}
+        <div class="loading" role="status">
+            <span class="spinner" aria-hidden="true"></span>
+            <p>Signing you in</p>
+        </div>
+    {/if}
+</main>
+
+<style>
+    main {
+        min-height: 100dvh;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 40px;
+        padding: 16px;
+        color: var(--on-art);
+        text-align: center;
+    }
+    .loading { display: grid; justify-items: center; gap: 14px; font-weight: 700; font-size: 1.1rem; }
+    .spinner {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 4px solid oklch(1 0 0 / 0.3);
+        border-top-color: var(--on-art);
+        animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .panel {
+        width: min(420px, 100%);
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+        padding: 28px 24px;
+        border-radius: var(--radius-l);
+        background: var(--surface);
+        color: var(--ink);
+        box-shadow: var(--shadow-2);
+    }
+    h1 { font-size: 1.3rem; }
+    p { color: var(--ink-2); }
+</style>
