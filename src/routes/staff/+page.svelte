@@ -1,12 +1,11 @@
 <script>
     import { resolve } from "$app/paths";
-    import { onMount } from "svelte";
-    import { fade } from "svelte/transition";
+    import { onMount, tick } from "svelte";
+    import { fade, slide } from "svelte/transition";
     import { eventName } from "$lib/event";
     import { internal, liveshareData } from "$lib/liveshare.svelte.js";
-    import { hydrateDrafts } from "$lib/console/drafts.svelte.js";
+    import { CONTENT, hydrateDrafts } from "$lib/console/drafts.svelte.js";
     import { org, connectOrgStream, disconnectOrgStream } from "$lib/org.svelte.js";
-    import { slide } from "svelte/transition";
 
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
@@ -14,8 +13,9 @@
     import SyncPill from "$lib/console/SyncPill.svelte";
     import ShareCard from "$lib/console/ShareCard.svelte";
     import SetupCard from "$lib/console/SetupCard.svelte";
-    import LiveNow from "$lib/console/LiveNow.svelte";
-    import ContentList from "$lib/console/ContentList.svelte";
+    import SourceList from "$lib/console/SourceList.svelte";
+    import Editor from "$lib/console/Editor.svelte";
+    import Toasts from "$lib/console/Toasts.svelte";
     import AdminPanel from "$lib/console/AdminPanel.svelte";
     import Merge from "$lib/configs/merge.svelte";
 
@@ -25,6 +25,8 @@
     let isAdmin = $state(false);
     let view = $state("event"); // event | admin | merge
     let renaming = $state(false);
+    let selected = $state("announcement");
+    let editorEl = $state();
     let now = $state(new Date());
 
     onMount(() => {
@@ -86,6 +88,8 @@
             internal.initComplete = true;
         }
 
+        // Open on whatever is already showing, so the first screen is the one most likely to change.
+        selected = CONTENT.find((c) => liveshareData[c.key])?.key ?? "announcement";
         ready = true;
 
         try {
@@ -101,6 +105,15 @@
         }
     }
 
+    async function select(key) {
+        selected = key;
+        // On a single-column layout the editor sits below the list; bring it into view.
+        if (window.matchMedia("(max-width: 760px)").matches) {
+            await tick();
+            editorEl?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }
+
     function signOut() {
         disconnectOrgStream();
         localStorage.removeItem("creds");
@@ -113,7 +126,7 @@
     <title>Organizer console · Jumbotron</title>
 </svelte:head>
 
-<Backdrop trees={false} scrim={0.55} />
+<Backdrop trees={false} scrim={0.35} />
 
 <div class="shell">
     <header class="topbar">
@@ -121,30 +134,31 @@
             <Wordmark onArt size="s" />
             <span class="product">Organizer console</span>
         </div>
-        <div class="tools">
-            {#if internal.initComplete && view === "event"}<SyncPill />{/if}
-            {#if isAdmin || internal.initComplete}
-                <div class="view-switch" role="group" aria-label="Console view">
-                    <button aria-pressed={view === "event"} onclick={() => (view = "event")}>Event</button>
-                    {#if internal.initComplete}
-                        <button aria-pressed={view === "merge"} onclick={() => (view = "merge")}>
-                            Merge{#if incomingCount}<span class="count-badge" aria-label="{incomingCount} pending requests">{incomingCount}</span>{/if}
-                        </button>
-                    {/if}
-                    {#if isAdmin}
-                        <button aria-pressed={view === "admin"} onclick={() => (view = "admin")}>Admin</button>
-                    {/if}
-                </div>
-            {/if}
-            <div class="account">
-                {#if internal.slack}
-                    <img src="https://cachet.hackclub.com/users/{internal.slack}/r" alt="" width="32" height="32" />
+
+        {#if isAdmin || internal.initComplete}
+            <div class="view-switch" role="group" aria-label="Console view">
+                <button aria-pressed={view === "event"} onclick={() => (view = "event")}>Event</button>
+                {#if internal.initComplete}
+                    <button aria-pressed={view === "merge"} onclick={() => (view = "merge")}>
+                        Merge{#if incomingCount}<span class="count-badge" aria-label="{incomingCount} pending requests">{incomingCount}</span>{/if}
+                    </button>
                 {/if}
-                <span class="name">{internal.name ?? ""}</span>
-                <button class="btn btn-small btn-on-art" onclick={signOut}>
-                    <span class="icon" translate="no" aria-hidden="true">logout</span>Sign out
-                </button>
+                {#if isAdmin}
+                    <button aria-pressed={view === "admin"} onclick={() => (view = "admin")}>Admin</button>
+                {/if}
             </div>
+        {:else}
+            <span></span>
+        {/if}
+
+        <div class="account">
+            {#if internal.slack}
+                <img src="https://cachet.hackclub.com/users/{internal.slack}/r" alt="" width="32" height="32" />
+            {/if}
+            <span class="name">{internal.name ?? ""}</span>
+            <button class="btn btn-small btn-on-art" onclick={signOut}>
+                <span class="icon" translate="no" aria-hidden="true">logout</span>Sign out
+            </button>
         </div>
     </header>
 
@@ -172,81 +186,90 @@
             <div class="panel"><Merge /></div>
         </main>
     {:else}
-        <h1 class="event-title">{eventName}{internal.initComplete ? ` ${internal.cityName}` : ""}</h1>
-
-        <div class="layout" in:fade={{ duration: 150 }}>
-            <main class="main">
-                <div class="panel"><ShareCard /></div>
-
-                {#if !internal.initComplete}
-                    <div class="panel"><SetupCard /></div>
-                {:else}
-                    <div class="panel"><LiveNow /></div>
-                    <div class="panel"><ContentList /></div>
-
-                    <div class="panel settings">
-                        {#if renaming}
-                            <SetupCard oncancel={() => (renaming = false)} ondone={() => (renaming = false)} />
-                        {:else}
-                            <div class="setting-row">
-                                <div>
-                                    <span class="field-label">Event name</span>
-                                    <p class="setting-value">{eventName} {internal.cityName}</p>
-                                </div>
-                                <button class="btn btn-small" onclick={() => (renaming = true)}>Rename</button>
-                            </div>
-                            <p class="hint">You can close this tab any time. Attendees keep seeing whatever is live.</p>
-                        {/if}
+        <section class="hero" in:fade={{ duration: 150 }}>
+            <div class="title-block">
+                <h1>{eventName}{internal.initComplete ? ` ${internal.cityName}` : ""}</h1>
+                {#if internal.initComplete}
+                    <div class="meta">
+                        <SyncPill />
+                        <button class="btn btn-small btn-on-art" onclick={() => (renaming = !renaming)} aria-expanded={renaming}>
+                            {renaming ? "Cancel rename" : "Rename event"}
+                        </button>
                     </div>
                 {/if}
-            </main>
+            </div>
+            <ShareCard />
+        </section>
 
-            {#if internal.initComplete}
-                <aside class="preview" aria-label="Attendee preview">
+        {#if !internal.initComplete || renaming}
+            <div class="panel narrow" transition:slide={{ duration: 220 }}>
+                {#if renaming}
+                    <SetupCard oncancel={() => (renaming = false)} ondone={() => (renaming = false)} />
+                {:else}
+                    <SetupCard />
+                {/if}
+            </div>
+        {/if}
+
+        {#if internal.initComplete}
+            <main class="workspace" in:fade={{ duration: 150 }}>
+                <div class="panel pane-list"><SourceList {selected} onselect={select} /></div>
+
+                <div class="panel pane-editor" bind:this={editorEl}>
+                    {#key selected}
+                        <div in:fade={{ duration: 140 }}><Editor key={selected} /></div>
+                    {/key}
+                </div>
+
+                <aside class="pane-preview" aria-label="Attendee preview">
                     <p class="preview-label">What attendees see</p>
                     <div class="device">
                         <p class="device-title">{eventName} {internal.cityName}</p>
                         <AttendeeFeed data={liveshareData} {now} compact />
                     </div>
                 </aside>
-            {/if}
-        </div>
+            </main>
+        {/if}
     {/if}
 </div>
 
-<style>
-    .shell { min-height: 100dvh; padding: 0 16px 64px; }
+<Toasts />
 
+<style>
+    .shell { min-height: 100dvh; padding: 0 24px 96px; }
+
+    /* Brand left, view switch centered, account right */
     .topbar {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        justify-content: space-between;
         gap: 12px 20px;
-        max-width: 1180px;
+        max-width: 1440px;
         margin: 0 auto;
         padding: 16px 0;
         color: var(--on-art);
     }
-    .brand { display: flex; align-items: baseline; gap: 12px; }
-    .product { font-weight: 700; opacity: 0.85; }
-    .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .product { padding-left: 12px; border-left: 1px solid rgb(255 255 255 / 0.4); font-size: 1rem; font-weight: 700; line-height: 1.2; opacity: 0.9; }
+    .account { justify-self: end; display: flex; align-items: center; gap: 10px; }
+    .account img { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-sunken); }
+    .name { font-weight: 700; }
 
     .view-switch {
         display: inline-flex;
-        padding: 3px;
+        padding: 4px;
         border-radius: var(--radius-pill);
-        background: oklch(0.2 0.05 25 / 0.45);
+        background: rgb(20 24 32 / 0.55);
     }
     .view-switch button {
-        min-height: 30px;
-        padding: 0 14px;
+        min-height: 34px;
+        padding: 0 18px;
         border: 0;
         border-radius: var(--radius-pill);
         background: none;
         color: var(--on-art);
         font-weight: 700;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         cursor: pointer;
     }
     .view-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
@@ -258,90 +281,90 @@
         margin-left: 6px;
         padding: 0 5px;
         border-radius: var(--radius-pill);
-        background: var(--accent);
-        color: var(--accent-ink);
+        background: var(--red);
+        color: var(--on-color);
         font-size: 0.72rem;
     }
 
-    .notices { display: grid; gap: 8px; max-width: 1180px; margin: 8px auto 0; }
+    .notices { display: grid; gap: 8px; max-width: 1440px; margin: 0 auto 8px; }
     .notice {
         padding: 12px 16px;
         border-radius: var(--radius-m);
-        background: var(--accent-wash);
+        background: var(--yellow);
         color: var(--ink);
-        box-shadow: var(--shadow-1);
-    }
-
-    .account { display: flex; align-items: center; gap: 10px; }
-    .account img { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-sunken); }
-    .name { font-weight: 700; }
-
-    .event-title {
-        max-width: 1180px;
-        margin: 24px auto 28px;
-        color: var(--on-art);
-        font-family: var(--font-display);
-        font-weight: 400;
-        font-size: clamp(2.2rem, 5vw, 3.4rem);
-        text-shadow: 0 2px 12px oklch(0.2 0.05 25 / 0.35);
+        font-weight: 700;
     }
 
     .loading { margin-top: 30vh; text-align: center; color: var(--on-art); font-weight: 700; }
 
-    .layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 340px;
-        gap: 24px;
-        align-items: start;
-        max-width: 1180px;
-        margin: 0 auto;
+    /* Event title on the art, attendee code beside it */
+    .hero {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 20px 32px;
+        max-width: 1440px;
+        margin: 20px auto 28px;
     }
-    .main, .single { display: grid; gap: 16px; }
-    .single { max-width: 900px; margin: 24px auto 0; }
+    .title-block { display: grid; gap: 12px; }
+    h1 {
+        color: var(--on-art);
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(2.6rem, 6vw, 4.4rem);
+        line-height: 1;
+        text-shadow: 0 2px 18px rgb(20 24 32 / 0.45);
+    }
+    .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
     .panel {
-        padding: 28px;
+        padding: 24px;
         border-radius: var(--radius-l);
         background: var(--surface);
+        color: var(--ink);
         box-shadow: var(--shadow-2);
     }
+    .panel.narrow { max-width: 560px; margin: 0 auto 24px; }
 
-    .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .setting-value { font-weight: 700; font-size: 1.1rem; margin-top: 2px; }
-    .settings .hint { margin-top: 12px; }
-
-    .preview { position: sticky; top: 16px; }
-    .preview-label {
-        margin-bottom: 10px;
-        color: var(--on-art);
-        font-size: 0.8rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
+    /* Pick on the left, edit in the middle, see the result on the right */
+    .workspace {
+        display: grid;
+        grid-template-columns: 320px minmax(0, 1fr) 360px;
+        gap: 20px;
+        align-items: start;
+        max-width: 1440px;
+        margin: 0 auto;
     }
+    .pane-list { padding: 18px 12px; }
+    .pane-editor { padding: 28px 32px; min-height: 420px; }
+
+    .pane-preview { position: sticky; top: 16px; }
+    .preview-label { margin: 0 0 10px 6px; color: var(--on-art); font-weight: 700; font-size: 0.9rem; }
     .device {
-        max-height: calc(100dvh - 80px);
+        max-height: calc(100dvh - 72px);
         overflow: auto;
-        padding: 18px 14px;
-        border-radius: 32px;
+        padding: 20px 14px;
+        border-radius: 36px;
         background: var(--bg);
-        box-shadow: 0 0 0 8px oklch(0.22 0.04 25), var(--shadow-2);
+        box-shadow: 0 0 0 9px oklch(0.13 0.02 150), 0 0 0 10px var(--line), var(--shadow-2);
     }
-    .device-title {
-        margin-bottom: 12px;
-        text-align: center;
-        font-family: var(--font-display);
-        font-size: 1.35rem;
-    }
+    .device-title { margin-bottom: 14px; text-align: center; font-family: var(--font-display); font-size: 1.4rem; color: var(--ink); }
 
-    @media (max-width: 1000px) {
-        .layout { grid-template-columns: 1fr; }
-        .preview { position: static; }
-        .device { max-width: 420px; max-height: none; }
+    .single { max-width: 920px; margin: 24px auto 0; }
+
+    @media (max-width: 1180px) {
+        .workspace { grid-template-columns: 300px minmax(0, 1fr); }
+        .pane-preview { grid-column: 1 / -1; position: static; justify-self: center; width: min(420px, 100%); }
+        .device { max-height: none; }
     }
-    @media (max-width: 560px) {
-        .panel { padding: 20px 18px; }
-        .name { display: none; }
-        .product { display: none; }
+    @media (max-width: 760px) {
+        .shell { padding: 0 16px 96px; }
+        .topbar { grid-template-columns: 1fr auto; }
+        .view-switch { grid-column: 1 / -1; grid-row: 2; justify-self: center; }
+        .workspace { grid-template-columns: minmax(0, 1fr); }
+        .pane-editor { padding: 22px 18px; min-height: 0; scroll-margin-top: 16px; }
+        .name, .product { display: none; }
+        .hero { margin-top: 8px; }
     }
 </style>

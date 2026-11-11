@@ -1,5 +1,6 @@
 <script>
     // What attendees see. Used by the attendee portal and by the live preview in the console.
+    // Each kind of content keeps its own leaf color everywhere, so it is recognisable at a glance.
     import { resolve } from "$app/paths";
     import { eventTheme } from "$lib/event.js";
     import { relativeToNow, parseClock, toAt } from "$lib/time.js";
@@ -11,12 +12,21 @@
     let fileHref = $derived(data.file ? safeHref(data.file) : null);
     let youtubeHref = $derived(data.youtube ? safeHref(typeof data.youtube === "object" ? data.youtube.url : data.youtube) : null);
     let websiteHref = $derived(data.website ? safeHref(data.website) : null);
+
     const eventAt = (ev) => ev.at || toAt(parseClock(ev.time));
     const host = (url) => {
         try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
     };
 
-    let isEmpty = $derived(!data.announcement && !data.event && !data.file && !data.youtube && !data.website);
+    let links = $derived(
+        [
+            fileHref && { key: "file", href: fileHref, icon: "description", color: "var(--c-file)", title: "Slides and documents", sub: "Read at your own pace" },
+            youtubeHref && { key: "youtube", href: youtubeHref, icon: "smart_display", color: "var(--c-youtube)", title: "Watch the video", sub: "Opens on YouTube" },
+            websiteHref && { key: "website", href: websiteHref, icon: "language", color: "var(--c-website)", title: "Open link", sub: host(websiteHref) }
+        ].filter(Boolean)
+    );
+
+    let isEmpty = $derived(!data.announcement && !data.event && links.length === 0);
 </script>
 
 <div class="feed" class:compact>
@@ -29,144 +39,150 @@
     {/if}
 
     {#if data.announcement}
-        <section class="item announcement" class:changed={changed.includes("announcement")} aria-labelledby="ann-title">
-            <p class="kicker"><span class="icon" translate="no" aria-hidden="true">campaign</span> Announcement
-                {#if changed.includes("announcement")}<span class="new">Updated</span>{/if}</p>
-            {#if data.announcement.title}<h2 id="ann-title">{data.announcement.title}</h2>{/if}
+        <section class="block" style:--c="var(--c-announcement)" class:changed={changed.includes("announcement")} aria-label="Announcement">
+            <p class="kind"><span class="icon" translate="no" aria-hidden="true">campaign</span>Announcement
+                {#if changed.includes("announcement")}<span class="new">New</span>{/if}</p>
+            {#if data.announcement.title}<h2>{data.announcement.title}</h2>{/if}
             {#if data.announcement.message}<p class="body">{data.announcement.message}</p>{/if}
         </section>
     {/if}
 
     {#if data.event}
         {@const rel = relativeToNow(eventAt(data.event), now)}
-        <section class="item" class:changed={changed.includes("event")}>
-            <p class="kicker"><span class="icon" translate="no" aria-hidden="true">schedule</span> Up next
-                {#if changed.includes("event")}<span class="new">Updated</span>{/if}</p>
+        <section class="block" style:--c="var(--c-event)" class:changed={changed.includes("event")} aria-label="Up next">
+            <p class="kind"><span class="icon" translate="no" aria-hidden="true">schedule</span>Up next
+                {#if changed.includes("event")}<span class="new">New</span>{/if}</p>
             <h2>{data.event.title}</h2>
-            <p class="when"><span class="mono">{data.event.time}</span>{#if rel}<span class="rel">{rel}</span>{/if}</p>
+            <p class="when"><span class="time">{data.event.time}</span>{#if rel}<span class="rel">{rel}</span>{/if}</p>
         </section>
     {/if}
 
-    {#if fileHref}
-        <a class="item link" class:changed={changed.includes("file")} href={fileHref} target="_blank" rel="noopener noreferrer">
-            <span class="icon big" translate="no" aria-hidden="true">description</span>
-            <span class="link-text">
-                <span class="link-title">Slides and documents</span>
-                <span class="link-sub">Read at your own pace</span>
-            </span>
-            <span class="icon" translate="no" aria-hidden="true">open_in_new</span>
-        </a>
-    {/if}
-
-    {#if youtubeHref}
-        <a class="item link" class:changed={changed.includes("youtube")} href={youtubeHref} target="_blank" rel="noopener noreferrer">
-            <span class="icon big" translate="no" aria-hidden="true">smart_display</span>
-            <span class="link-text">
-                <span class="link-title">Watch the video</span>
-                <span class="link-sub">Opens on YouTube</span>
-            </span>
-            <span class="icon" translate="no" aria-hidden="true">open_in_new</span>
-        </a>
-    {/if}
-
-    {#if websiteHref}
-        <a class="item link" class:changed={changed.includes("website")} href={websiteHref} target="_blank" rel="noopener noreferrer">
-            <span class="icon big" translate="no" aria-hidden="true">language</span>
-            <span class="link-text">
-                <span class="link-title">Open link</span>
-                <span class="link-sub">{host(websiteHref)}</span>
-            </span>
-            <span class="icon" translate="no" aria-hidden="true">open_in_new</span>
-        </a>
+    {#if links.length}
+        <ul class="links" aria-label="Links">
+            {#each links as link (link.key)}
+                <li>
+                    <a href={link.href} target="_blank" rel="noopener noreferrer" class:changed={changed.includes(link.key)} style:--c={link.color}>
+                        <span class="swatch icon" translate="no" aria-hidden="true">{link.icon}</span>
+                        <span class="link-text">
+                            <span class="link-title">{link.title}</span>
+                            <span class="link-sub">{link.sub}</span>
+                        </span>
+                        <span class="icon go" translate="no" aria-hidden="true">open_in_new</span>
+                    </a>
+                </li>
+            {/each}
+        </ul>
     {/if}
 </div>
 
 <style>
     .feed { display: grid; gap: 12px; }
 
-    .item {
-        display: block;
-        padding: 18px 20px;
-        border-radius: var(--radius-m);
-        background: var(--surface);
-        box-shadow: var(--shadow-1);
-        color: var(--ink);
-        text-decoration: none;
-        transition: box-shadow var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
+    /* Announcement and Up next: solid blocks of their leaf color */
+    .block {
+        padding: 20px 22px 22px;
+        border-radius: var(--radius-l);
+        background: var(--c);
+        color: var(--on-color);
     }
-    .item.changed { animation: arrive 1.6s var(--ease-out); }
-    @keyframes arrive {
-        0% { box-shadow: 0 0 0 4px var(--accent), var(--shadow-1); transform: translateY(-4px); }
-        100% { box-shadow: 0 0 0 0 var(--accent), var(--shadow-1); transform: none; }
-    }
-
-    .announcement { background: var(--accent-wash); }
-
-    .kicker {
+    .kind {
         display: flex;
         align-items: center;
         gap: 6px;
-        margin-bottom: 6px;
-        font-size: 0.8rem;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
         font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--ink-2);
     }
-    .kicker .icon { font-size: 1.1rem; }
+    .kind .icon { font-size: 1.15rem; }
     .new {
         margin-left: auto;
-        padding: 2px 8px;
-        border-radius: var(--radius-pill);
-        background: var(--accent);
-        color: var(--accent-ink);
-        font-size: 0.7rem;
-        letter-spacing: 0.02em;
-    }
-
-    h2 { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; }
-    .body { margin-top: 6px; font-size: 1.05rem; color: var(--ink-2); max-width: 65ch; white-space: pre-line; }
-
-    .when { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
-    .when .mono { font-size: 1.05rem; font-weight: 700; }
-    .rel {
         padding: 2px 10px;
         border-radius: var(--radius-pill);
-        background: var(--live-wash);
-        color: oklch(0.38 0.1 150);
+        background: var(--on-color);
+        color: var(--c);
+        font-size: 0.75rem;
+    }
+    h2 {
+        font-size: 1.65rem;
+        font-weight: 800;
+        line-height: 1.12;
+        letter-spacing: -0.015em;
+        text-wrap: balance;
+    }
+    .body { margin-top: 8px; font-size: 1.08rem; max-width: 60ch; white-space: pre-line; }
+
+    .when { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .time { font: 700 1.5rem/1 var(--font-mono); letter-spacing: -0.02em; }
+    .rel {
+        padding: 4px 12px;
+        border-radius: var(--radius-pill);
+        background: rgb(255 255 255 / 0.22);
+        color: var(--on-color);
         font-weight: 700;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
     }
 
-    .link { display: flex; align-items: center; gap: 14px; }
-    .link:hover { box-shadow: var(--shadow-2); }
-    .link:active { transform: scale(0.99); }
-    .icon.big {
-        font-size: 1.6rem;
-        width: 44px;
-        height: 44px;
+    /* Links: dark rows with a leaf-colored swatch */
+    .links { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .links a {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 16px 12px 12px;
+        border-radius: var(--radius-m);
+        background: var(--surface);
+        color: var(--ink);
+        text-decoration: none;
+        transition: background-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+    }
+    .links a:hover { background: var(--surface-raised); }
+    .links a:active { transform: scale(0.99); }
+    .swatch {
+        flex: none;
+        width: 46px;
+        height: 46px;
         display: grid;
         place-items: center;
-        border-radius: 12px;
-        background: var(--surface-sunken);
-        color: var(--ink-2);
+        border-radius: 13px;
+        background: var(--c);
+        color: var(--on-color);
+        font-size: 1.5rem;
     }
     .link-text { flex: 1; display: grid; gap: 2px; min-width: 0; }
     .link-title { font-weight: 800; font-size: 1.05rem; }
     .link-sub { color: var(--ink-3); font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .go { color: var(--ink-3); }
 
-    .empty { text-align: center; padding: 36px 16px 28px; }
-    .empty img { height: 72px; margin-bottom: 10px; }
-    .empty-title { font-family: var(--font-display); font-size: 1.4rem; }
+    .changed { animation: arrive 1.8s var(--ease-out); }
+    @keyframes arrive {
+        0% { box-shadow: 0 0 0 4px var(--on-art); transform: translateY(-4px); }
+        100% { box-shadow: 0 0 0 0 transparent; transform: none; }
+    }
+
+    .empty {
+        text-align: center;
+        padding: 32px 20px 28px;
+        border-radius: var(--radius-l);
+        background: var(--surface);
+    }
+    .empty img { height: 76px; margin-bottom: 10px; }
+    .empty-title { font-family: var(--font-display); font-size: 1.5rem; }
     .empty-body { margin: 6px auto 0; color: var(--ink-2); max-width: 36ch; }
 
-    .compact .item { padding: 12px 14px; }
-    .compact h2 { font-size: 1.1rem; }
-    .compact .body { font-size: 0.92rem; }
-    .compact .icon.big { width: 34px; height: 34px; font-size: 1.3rem; }
-    .compact .link-title { font-size: 0.95rem; }
-    .compact .empty { padding: 20px 8px; }
+    .compact { gap: 8px; }
+    .compact .block { padding: 14px 16px 16px; border-radius: var(--radius-m); }
+    .compact .kind { font-size: 0.78rem; margin-bottom: 4px; }
+    .compact h2 { font-size: 1.2rem; }
+    .compact .body { font-size: 0.92rem; margin-top: 4px; }
+    .compact .time { font-size: 1.1rem; }
+    .compact .rel { font-size: 0.78rem; padding: 2px 8px; }
+    .compact .when { margin-top: 8px; }
+    .compact .links a { padding: 8px 12px 8px 8px; gap: 10px; }
+    .compact .swatch { width: 34px; height: 34px; font-size: 1.2rem; border-radius: 10px; }
+    .compact .link-title { font-size: 0.92rem; }
+    .compact .link-sub { font-size: 0.8rem; }
+    .compact .empty { padding: 20px 10px; }
     .compact .empty img { height: 52px; }
     .compact .empty-title { font-size: 1.15rem; }
-    .compact .empty-body { font-size: 0.88rem; }
+    .compact .empty-body { font-size: 0.85rem; }
 </style>

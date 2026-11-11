@@ -178,7 +178,7 @@
                     <button class="btn btn-small btn-quiet" onclick={() => (confirming = null)}>Cancel</button>
                 </div>
             {:else}
-                <div><button class="btn btn-small danger" onclick={() => (confirming = "leave")} disabled={busy}>Leave merge…</button></div>
+                <div><button class="btn btn-small btn-destructive" onclick={() => (confirming = "leave")} disabled={busy}>Leave merge…</button></div>
             {/if}
         </section>
 
@@ -197,7 +197,7 @@
                                     <button class="btn btn-small btn-quiet" onclick={() => (confirming = null)}>Cancel</button>
                                 </span>
                             {:else}
-                                <button class="btn btn-small btn-quiet danger" onclick={() => (confirming = m.code)} disabled={busy}>Remove…</button>
+                                <button class="btn btn-small btn-destructive" onclick={() => (confirming = m.code)} disabled={busy}>Remove…</button>
                             {/if}
                         </li>
                     {/each}
@@ -293,8 +293,6 @@
     .sub { color: var(--ink-3); font-size: 0.88rem; }
     .row-confirm { display: inline-flex; gap: 6px; }
 
-    .danger { --btn-ink: var(--danger); }
-    .danger:hover { --btn-bg: var(--danger-wash); }
     .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-m); background: var(--danger-wash); }
     .confirm p { flex: 1; min-width: 200px; }
 
@@ -304,9 +302,9 @@
         width: 48px;
         height: 56px;
         padding: 0;
-        border: 1.5px solid var(--line);
+        border: 1.5px solid var(--line-strong);
         border-radius: var(--radius-s);
-        background: var(--surface);
+        background: var(--surface-sunken);
         color: var(--ink);
         font: 700 1.5rem/1 var(--font-mono);
         text-align: center;

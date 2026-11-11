@@ -179,12 +179,13 @@
 
             <section class="organizer" aria-label="Organizers">
                 {#if hasCreds}
-                    <a class="btn btn-on-art" href={resolve("/staff")}>
+                    <a class="btn btn-on-art org-btn" href={resolve("/staff")}>
                         <span class="icon" translate="no" aria-hidden="true">admin_panel_settings</span>
                         Open your organizer console
                     </a>
                 {:else if !organizerOpen}
-                    <button class="text-link" onclick={() => (organizerOpen = true)} aria-expanded="false">
+                    <button class="btn btn-on-art org-btn" onclick={() => (organizerOpen = true)} aria-expanded="false">
+                        <span class="icon" translate="no" aria-hidden="true">admin_panel_settings</span>
                         Organizer? Sign in
                     </button>
                 {:else}
@@ -251,7 +252,7 @@
         transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
     }
     .boxes input:focus { outline: none; border-color: var(--accent); transform: translateY(-2px); }
-    .boxes input.filled { background: var(--surface); }
+    .boxes input.filled { background: oklch(0.985 0.012 88); }
     .boxes input[aria-invalid="true"] { border-color: var(--danger); }
     .boxes input:disabled { opacity: 0.7; }
 
@@ -272,31 +273,27 @@
     .callout .icon { color: var(--danger); }
 
     .organizer { display: flex; justify-content: center; width: 100%; }
-    .text-link {
-        background: none;
-        border: 0;
-        padding: 10px 12px;
-        color: var(--on-art);
-        font: 700 1rem var(--font-text);
-        text-decoration: underline;
-        text-underline-offset: 4px;
-        cursor: pointer;
-        opacity: 0.9;
+    .org-btn {
+        min-height: 54px;
+        padding: 0 1.5rem;
+        border-radius: 14px;
+        font-size: 1.12rem;
     }
-    .text-link:hover { opacity: 1; }
+    .org-btn .icon { font-size: 1.35rem; }
 
     .org-panel {
-        width: min(440px, 100%);
-        padding: 24px;
+        width: min(500px, 100%);
+        padding: 28px 28px 24px;
         border-radius: var(--radius-l);
         background: var(--surface);
         color: var(--ink);
         text-align: left;
         box-shadow: var(--shadow-2);
     }
-    .org-panel h2 { font-size: 1.2rem; }
-    .org-panel p { margin-top: 6px; color: var(--ink-2); }
-    .org-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .org-panel h2 { font-size: 1.45rem; }
+    .org-panel p { margin-top: 8px; color: var(--ink-2); font-size: 1.05rem; }
+    .org-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+    .org-actions .btn { min-height: 52px; padding: 0 1.4rem; font-size: 1.05rem; border-radius: 14px; }
 
     .joining { display: grid; justify-items: center; gap: 20px; }
 
