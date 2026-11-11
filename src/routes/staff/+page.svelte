@@ -90,11 +90,24 @@
         }
     })
 
+    // Credentials go in a POST body, never the URL (URLs end up in proxy and browser logs).
+    function authedPost(path) {
+        return fetch(`https://api.jumbotron.hackclub.com${path}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: internal.code, password: internal.password })
+        });
+    }
+
     onMount(() => {
         setTimeout(async () => {
-            const response = await fetch(`https://api.jumbotron.hackclub.com/getAdmins?code=${internal.code}&password=${internal.password}`);
-            const data = await response.json();
-            adminList = Array.isArray(data.admins) ? data.admins : [];
+            try {
+                const response = await authedPost("/getAdmins");
+                const data = await response.json();
+                adminList = Array.isArray(data.admins) ? data.admins : [];
+            } catch (e) {
+                adminList = [];
+            }
         }, 100);
 
     })
@@ -105,7 +118,7 @@
         adminError = "";
         try {
             // Fetch events list
-            const res = await fetch(`https://api.jumbotron.hackclub.com/allEvents?code=${internal.code}&password=${internal.password}`);
+            const res = await authedPost("/allEvents");
             const data = await res.json();
             if (!res.ok) {
                 adminError = data.error || "Failed to fetch events";
@@ -119,8 +132,8 @@
                 allEventsList = data.list;
             }
 
-            // Fetch separate banned list using the GET endpoint
-            const banRes = await fetch(`https://api.jumbotron.hackclub.com/getBans?code=${internal.code}&password=${internal.password}`);
+            // Fetch separate banned list
+            const banRes = await authedPost("/getBans");
             const banData = await banRes.json();
             if (banRes.ok && banData.list) {
                 try {

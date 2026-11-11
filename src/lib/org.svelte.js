@@ -11,8 +11,10 @@ export const org = $state({
 });
 
 const nameOf = (e) => (e && e.name) || "Another organizer";
-const newIn = (now = [], before = []) => now.find(x => !before.some(y => y.code === x.code));
-const goneFrom = (now = [], before = []) => before.find(x => !now.some(y => y.code === x.code));
+// `|| []` rather than default params: callers pass `prev && prev.x`, which is null (not
+// undefined) before the first state arrives, and defaults only apply to undefined.
+const newIn = (now, before) => (now || []).find(x => !(before || []).some(y => y.code === x.code));
+const goneFrom = (now, before) => (before || []).find(x => !(now || []).some(y => y.code === x.code));
 
 // Turns a pushed merge event into a sentence for this organizer, or "" when the change was
 // caused by this organizer's own click (the panel already reflects it).
@@ -64,38 +66,48 @@ let stream = null;
 let retryTimer = null;
 let handlers = { onSignOut: () => {}, onEvent: () => {} };
 
-function credsQuery() {
-    return `code=${encodeURIComponent(internal.code)}&password=${encodeURIComponent(internal.password)}`;
-}
+let attempt = 0;                 // bumped on every (dis)connect so stale async attempts bail out
 
 function scheduleReconnect(delay = 5000) {
     clearTimeout(retryTimer);
-    retryTimer = setTimeout(recheckAndReconnect, delay);
+    retryTimer = setTimeout(openStream, delay);
 }
 
-// EventSource gives no status code on failure, so ask a plain endpoint whether the
-// credentials are still good before reopening the stream.
-async function recheckAndReconnect() {
+function closeStream() {
+    if (stream) stream.close();
+    stream = null;
+    org.connected = false;
+}
+
+// EventSource can't send a body or headers, so the password never goes in its URL: each
+// connection first trades the credentials (POST body) for a single-use ticket that expires in
+// seconds. That POST doubles as the credential check: 401 means signed out for good.
+// A used ticket can't be replayed, so the browser's built-in auto-reconnect is useless here;
+// every drop is handled by closing and reconnecting with a fresh ticket.
+async function openStream() {
+    closeStream();
+    const mine = ++attempt;
+    let ticket;
     try {
-        const res = await fetch(`${API}/mergeState?${credsQuery()}`);
+        const res = await fetch(`${API}/streamTicket`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: internal.code, password: internal.password })
+        });
+        if (mine !== attempt) return;
         if (res.status === 401) {
             disconnectOrgStream();
             handlers.onSignOut();
             return;
         }
-        if (res.ok) {
-            org.state = await res.json();
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        ({ ticket } = await res.json());
     } catch (e) {
-        scheduleReconnect();
+        if (mine === attempt) scheduleReconnect();
         return;
     }
-    openStream();
-}
-
-function openStream() {
-    if (stream) stream.close();
-    stream = new EventSource(`${API}/orgStream?${credsQuery()}`);
+    if (mine !== attempt) return;
+    stream = new EventSource(`${API}/orgStream?ticket=${encodeURIComponent(ticket)}`);
 
     stream.onopen = () => {
         org.connected = true;
@@ -124,21 +136,16 @@ function openStream() {
             disconnectOrgStream();
             handlers.onSignOut();
         } else if (msg.type === "reset") {
-            // Admin replaced the events database; our code may no longer exist.
-            org.connected = false;
-            stream.close();
-            stream = null;
+            // Admin replaced the events database; our code may no longer exist. The ticket
+            // request on reconnect tells us (401 -> sign out).
+            closeStream();
             scheduleReconnect(1000);
         }
     };
 
     stream.onerror = () => {
-        org.connected = false;
-        // CONNECTING means the browser is already retrying a dropped connection itself.
-        if (stream && stream.readyState === EventSource.CLOSED) {
-            stream = null;
-            scheduleReconnect();
-        }
+        closeStream();
+        scheduleReconnect();
     };
 }
 
@@ -149,10 +156,9 @@ export function connectOrgStream(options = {}) {
 }
 
 export function disconnectOrgStream() {
+    attempt++;
     clearTimeout(retryTimer);
-    if (stream) stream.close();
-    stream = null;
-    org.connected = false;
+    closeStream();
 }
 
 async function post(path, body = {}) {
