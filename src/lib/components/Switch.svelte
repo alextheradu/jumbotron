@@ -38,7 +38,7 @@
         width: 27px;
         height: 27px;
         border-radius: 50%;
-        background: var(--surface);
+        background: var(--ink);
         box-shadow: 0 2px 4px oklch(0.2 0.05 25 / 0.25);
         transition: transform var(--dur-2) var(--ease-out);
     }

@@ -5,13 +5,16 @@ import { liveshareData } from "$lib/liveshare.svelte.js";
 import { parseClock, toAt, formatClock, prefersHour12 } from "$lib/time.js";
 import { drivePreviewLink, youtubeId, youtubeWatchUrl, normalizeUrl } from "$lib/links.js";
 
+// `color` is the leaf color for that kind of content, shared by the console and attendee views.
 export const CONTENT = [
-    { key: "announcement", label: "Announcement", icon: "campaign", hint: "A short message at the top of every attendee's screen." },
-    { key: "event", label: "Up next", icon: "schedule", hint: "The next thing on the schedule, with a live countdown for attendees." },
-    { key: "file", label: "Document or slides", icon: "description", hint: "A Google Drive file attendees can page through on their own." },
-    { key: "youtube", label: "YouTube video", icon: "smart_display", hint: "A video attendees can open on their phone." },
-    { key: "website", label: "Website or form", icon: "language", hint: "Any link: a sign-up form, the schedule, a submission page." }
+    { key: "announcement", label: "Announcement", icon: "campaign", color: "var(--ember)", hint: "A short message at the top of every attendee's screen." },
+    { key: "event", label: "Up next", icon: "schedule", color: "var(--amber)", hint: "The next thing on the schedule, with a live countdown." },
+    { key: "file", label: "Slides or document", icon: "description", color: "var(--sky)", hint: "A Google Drive file attendees can read at their own pace." },
+    { key: "youtube", label: "YouTube video", icon: "smart_display", color: "var(--berry)", hint: "A video attendees can open on their phone." },
+    { key: "website", label: "Link", icon: "language", color: "var(--lichen)", hint: "A sign-up form, the schedule, a submission page." }
 ];
+
+export const colorFor = (key) => CONTENT.find((c) => c.key === key)?.color ?? "var(--ember)";
 
 export const labelFor = (key) => CONTENT.find((c) => c.key === key)?.label ?? key;
 

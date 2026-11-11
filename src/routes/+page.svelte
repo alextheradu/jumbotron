@@ -243,7 +243,7 @@
         border: 2px solid transparent;
         border-radius: var(--radius-m);
         background: oklch(0.985 0.01 75 / 0.92);
-        color: var(--ink);
+        color: var(--ink-dark);
         font: 700 2rem/1 var(--font-mono);
         text-align: center;
         caret-color: var(--accent-strong);
@@ -251,7 +251,7 @@
         transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
     }
     .boxes input:focus { outline: none; border-color: var(--accent); transform: translateY(-2px); }
-    .boxes input.filled { background: var(--surface); }
+    .boxes input.filled { background: oklch(0.985 0.012 88); }
     .boxes input[aria-invalid="true"] { border-color: var(--danger); }
     .boxes input:disabled { opacity: 0.7; }
 

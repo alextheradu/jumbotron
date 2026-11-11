@@ -114,7 +114,7 @@
     <title>{eventName}{cityName ? ` ${cityName}` : ""} · Jumbotron</title>
 </svelte:head>
 
-<Backdrop trees={false} scrim={0.35} />
+<Backdrop trees={false} scrim={0.5} />
 
 <div class="page">
     <header>
@@ -171,7 +171,7 @@
         display: grid;
         grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        max-width: 720px;
+        max-width: 640px;
         margin: 0 auto;
     }
     .back { --btn-ink: var(--on-art); justify-self: start; padding-left: 4px; }
@@ -180,8 +180,8 @@
         margin-top: 24px;
         font-family: var(--font-display);
         font-weight: 400;
-        font-size: clamp(2rem, 8vw, 3rem);
-        text-shadow: 0 2px 12px oklch(0.2 0.05 25 / 0.35);
+        font-size: clamp(2.2rem, 9vw, 3.4rem);
+        text-shadow: 0 2px 18px oklch(0.12 0.03 150 / 0.5);
         text-wrap: balance;
     }
 
@@ -192,7 +192,7 @@
         gap: 6px;
         padding: 4px 10px;
         border-radius: var(--radius-pill);
-        background: oklch(0.2 0.05 25 / 0.45);
+        background: oklch(0.16 0.03 150 / 0.6);
         font-size: 0.85rem;
         font-weight: 700;
     }
@@ -202,14 +202,12 @@
     .status.offline .dot { background: oklch(0.7 0.18 27); }
     @keyframes breathe { 50% { opacity: 0.45; } }
 
+    /* Cards sit straight on the art; no sheet behind them */
     .sheet {
         width: 100%;
-        max-width: 720px;
+        max-width: 640px;
         margin: 0 auto;
-        padding: 20px 16px 48px;
-        border-radius: var(--radius-l) var(--radius-l) 0 0;
-        background: var(--bg);
-        box-shadow: 0 -8px 32px oklch(0.2 0.05 25 / 0.25);
+        padding: 0 16px 56px;
     }
 
     .offline {
@@ -219,12 +217,12 @@
         margin-bottom: 12px;
         padding: 10px 14px;
         border-radius: var(--radius-m);
-        background: var(--danger-wash);
+        background: var(--surface);
     }
     .offline p { flex: 1; }
     .offline .icon { color: var(--danger); }
 
-    .notice { display: grid; justify-items: center; gap: 10px; padding: 40px 8px; text-align: center; }
+    .notice { display: grid; justify-items: center; gap: 10px; padding: 36px 20px; text-align: center; border-radius: var(--radius-l); background: var(--surface); }
     .notice-title { font-family: var(--font-display); font-size: 1.5rem; }
     .notice p { color: var(--ink-2); max-width: 40ch; }
     .notice .btn { margin-top: 8px; }
