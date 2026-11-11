@@ -112,266 +112,208 @@
         run(() => respondMergeRequest(req.code, accept), `${accept ? "Accepted" : "Declined"} merge request from ${req.name}.`);
     }
 
+    // Destructive actions confirm inline: `confirming` holds a member code, or "leave".
+    let confirming = $state(null);
+
     function unmergeEvent(member) {
-        if (!confirm(`Remove ${member.name}'s event from your merge? Their participants will keep the current screen but stop receiving your updates.`)) return;
+        confirming = null;
         run(() => removeMember(member.code), `Removed ${member.name}'s event from your merge.`);
     }
 
     function leave() {
-        if (!confirm(`Leave ${state.root.name}'s merged event? Your participants will stop receiving their updates.`)) return;
+        confirming = null;
         run(leaveMerge, "You left the merged event. Your event is standalone again.");
     }
+
+    const avatar = (slack) => `https://cachet.hackclub.com/users/${slack}/r`;
 </script>
 
-<style>
-    .config {
-        margin: 20px;
-        background-color: rgb(231, 231, 231);
-        padding: 20px;
-        padding-top: 30px;
-        border-radius: 30px;
-        border: 5px grey solid;
-        h3 {
-            margin-bottom: 10px;
-        }
-    }
-    button {
-        background-color: rgb(58, 57, 57);
-        color: white;
-        border: none;
-        border-radius: 20px;
-        cursor: pointer;
-        font-weight: bold;
-    }
-    button:hover {
-        background-color: rgb(80, 78, 78);
-    }
-    .error-msg { color: #ec374f; font-weight: bold; margin-top: 10px; }
-    .success-msg { color: #2ecc71; font-weight: bold; margin-top: 10px; }
 
-    /* Centered PFP Grid Container */
-    .pfp-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(100px, 100px));
-        justify-content: center;
-        justify-items: center;
-        gap: 15px;
-        margin-top: 15px;
-        margin-bottom: 15px;
-    }
-
-    /* PFP Wrapper for Hover Layer */
-    .pfp-wrapper {
-        position: relative;
-        width: 100px;
-        height: 100px;
-        border-radius: 25px;
-        overflow: hidden;
-    }
-
-    .mergePfp {
-        display: block;
-        width: 100px;
-        height: 100px;
-        border-radius: 25px;
-        border: 5px solid rgb(176, 91, 91);
-        box-shadow: 0px 0px 10px 10px rgba(117, 81, 81, 0.081);
-        user-select: none;
-        -webkit-user-drag: none;
-        -moz-user-select: none;
-        object-fit: cover;
-    }
-
-    /* Semi-opaque hover overlay and remove button */
-    .pfp-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.55);
-        border-radius: 25px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0;
-        transition: opacity 0.2s ease-in-out;
-    }
-
-    .pfp-wrapper:hover .pfp-overlay {
-        opacity: 1;
-    }
-
-    .remove-btn {
-        background: transparent;
-        border: none;
-        color: white;
-        font-size: 28px;
-        cursor: pointer;
-        font-weight: bold;
-        line-height: 1;
-        padding: 0;
-        border-radius: 50%;
-        width: 40px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .remove-btn:hover {
-        background: rgba(255, 255, 255, 0.2);
-    }
-
-    #code {
-        font-family: Host Grotesk, Montserrat;
-        font-size: 40px;
-        animation: codeLoadAnimation 0.4s ease-out forwards;
-    }
-
-    /* Digit Code Box Inputs Styling */
-    .digit-inputs-container {
-        display: flex;
-        gap: 10px;
-        justify-content: center;
-        align-items: center;
-        margin-top: 15px;
-        margin-bottom: 15px;
-    }
-
-    .digit-box {
-        width: 50px;
-        height: 50px;
-        text-align: center;
-        font-size: 26px;
-        font-weight: bold;
-        font-family: Atkinson Hyperlegible Mono, Montserrat;
-        border-radius: 12px;
-        border: 2px solid grey;
-        background-color: white;
-        outline: none;
-        transition: border-color 0.2s;
-    }
-
-    .digit-box:focus {
-        border-color: rgb(58, 57, 57);
-        box-shadow: 0 0 5px rgba(58, 57, 57, 0.3);
-    }
-
-    .live {
-        font-family: Atkinson Hyperlegible Mono, Montserrat;
-        font-size: 13px;
-        color: #2ecc71;
-        margin-top: 0;
-    }
-    .live.offline {
-        color: #e67e22;
-    }
-    button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-</style>
-
-<div class="config admin-box" style:background-color="white" style:border-color="rgb(230,230,230)" style:box-shadow="0px 0px 10px 5px rgba(0,0,0, 0.3)" transition:slide>
-    <h3 style:font-family="Montserrat" style:font-weight=800>Event Merging Panel</h3>
-    <p>Bridge your event into another host or accept inputs from other organizers.</p>
-    <h4 id="code">{internal.code}</h4>
-    <p class="live" class:offline={!org.connected}>{org.connected ? "Live" : "Reconnecting..."}</p>
-
-    {#if !state}
-        <p>Loading merge status...</p>
-    {:else if isBridged}
-        <p>Merged into <strong>{state.root.name}</strong>'s event{state.root.cityName ? ` (${state.root.cityName})` : ""}, code <strong>{state.root.code}</strong>.</p>
-        <p>Your participants see the shared screen. Updates you push also go to everyone in the merge.</p>
-        <div class="pfp-grid">
-            <img class="mergePfp" src="https://cachet.hackclub.com/users/{state.root.slack}/r" alt="{state.root.name}'s profile" title={state.root.name} />
-            {#each members.filter(m => m.code !== internal.code) as m (m.code)}
-                <img class="mergePfp" src="https://cachet.hackclub.com/users/{m.slack}/r" alt="{m.name}'s profile" title={m.name} />
-            {/each}
+<div class="merge">
+    <div class="head">
+        <div>
+            <h2>Merge events</h2>
+            <p class="hint">Share one screen across several events. Everyone in a merge sees the same updates.</p>
         </div>
-        <p><button onclick={leave} disabled={busy}>Leave Merge</button></p>
-    {:else if members.length > 0}
-        <div class="pfp-grid">
-            {#each members as m (m.code)}
-                <div class="pfp-wrapper">
-                    <img class="mergePfp" src="https://cachet.hackclub.com/users/{m.slack}/r" alt="{m.name}'s profile" title="{m.name} ({m.code})" />
-                    <div class="pfp-overlay">
-                        <button class="remove-btn" title="Remove {m.name}'s event" onclick={() => unmergeEvent(m)} disabled={busy}><span translate="no" class="material-symbols-outlined">cancel</span></button>
-                    </div>
-                </div>
-            {/each}
-        </div>
-        <p><i>Hover and click a profile to remove their connection</i></p>
-    {/if}
+        <span class="conn" class:offline={!org.connected} role="status">
+            <span class="dot" aria-hidden="true"></span>{org.connected ? "Connected" : "Reconnecting"}
+        </span>
+    </div>
 
     {#if mergeError}
-        <p class="error-msg" style="font-family: Atkinson Hyperlegible Mono">{mergeError}</p>
+        <p class="message error" role="alert" transition:slide={{ duration: 200 }}>{mergeError}</p>
     {/if}
     {#if mergeMessage}
-        <p class="success-msg" style="font-family: Atkinson Hyperlegible Mono">{mergeMessage}</p>
+        <p class="message ok" role="status" transition:slide={{ duration: 200 }}>{mergeMessage}</p>
+    {/if}
+
+    {#if !state && org.error}
+        <p class="message error" role="alert">{org.error} Retrying automatically.</p>
+    {:else if !state}
+        <p class="hint">Loading merge status</p>
+
+    {:else if isBridged}
+        <section class="block">
+            <h3>Merged into {state.root.name}'s event</h3>
+            <p class="hint">
+                {state.root.cityName ? `${state.root.cityName}, ` : ""}code <span class="mono">{state.root.code}</span>.
+                Your attendees see the shared screen, and what you publish goes to everyone in the merge.
+            </p>
+            <ul class="people">
+                <li>
+                    <img src={avatar(state.root.slack)} alt="" />
+                    <span class="who"><strong>{state.root.name}</strong><span class="sub">Host</span></span>
+                </li>
+                {#each members.filter((m) => m.code !== internal.code) as m (m.code)}
+                    <li>
+                        <img src={avatar(m.slack)} alt="" />
+                        <span class="who"><strong>{m.name}</strong><span class="sub mono">{m.code}</span></span>
+                    </li>
+                {/each}
+            </ul>
+            {#if confirming === "leave"}
+                <div class="confirm" role="group" aria-label="Confirm leaving the merge">
+                    <p>Leave {state.root.name}'s merge? Your attendees stop getting their updates.</p>
+                    <button class="btn btn-small btn-danger" onclick={leave} disabled={busy}>Leave</button>
+                    <button class="btn btn-small btn-quiet" onclick={() => (confirming = null)}>Cancel</button>
+                </div>
+            {:else}
+                <div><button class="btn btn-small danger" onclick={() => (confirming = "leave")} disabled={busy}>Leave merge…</button></div>
+            {/if}
+        </section>
+
+    {:else}
+        {#if members.length > 0}
+            <section class="block">
+                <h3>Merged into your event ({members.length})</h3>
+                <ul class="people">
+                    {#each members as m (m.code)}
+                        <li transition:slide={{ duration: 200 }}>
+                            <img src={avatar(m.slack)} alt="" />
+                            <span class="who"><strong>{m.name}</strong><span class="sub mono">{m.code}</span></span>
+                            {#if confirming === m.code}
+                                <span class="row-confirm">
+                                    <button class="btn btn-small btn-danger" onclick={() => unmergeEvent(m)} disabled={busy}>Remove</button>
+                                    <button class="btn btn-small btn-quiet" onclick={() => (confirming = null)}>Cancel</button>
+                                </span>
+                            {:else}
+                                <button class="btn btn-small btn-quiet danger" onclick={() => (confirming = m.code)} disabled={busy}>Remove…</button>
+                            {/if}
+                        </li>
+                    {/each}
+                </ul>
+                <p class="hint">Removed events keep their current screen but stop getting your updates.</p>
+            </section>
+        {/if}
+
+        <section class="block">
+            <h3>Requests to join you{incomingRequests.length ? ` (${incomingRequests.length})` : ""}</h3>
+            {#if incomingRequests.length === 0}
+                <p class="hint">None right now. New requests show up here on their own.</p>
+            {:else}
+                <p class="hint">Accepted events switch to your attendee code.</p>
+                <ul class="people">
+                    {#each incomingRequests as req (req.code)}
+                        <li transition:slide={{ duration: 200 }}>
+                            <img src={avatar(req.slack)} alt="" />
+                            <span class="who"><strong>{req.name}</strong><span class="sub">{req.cityName || req.code}</span></span>
+                            <span class="row-confirm">
+                                <button class="btn btn-small btn-primary" disabled={busy} onclick={() => acknowledgeMerge(req, true)}>Accept</button>
+                                <button class="btn btn-small btn-quiet" disabled={busy} onclick={() => acknowledgeMerge(req, false)}>Decline</button>
+                            </span>
+                        </li>
+                    {/each}
+                </ul>
+            {/if}
+        </section>
+
+        <section class="block">
+            <h3>Merge into another event</h3>
+            {#if outgoing}
+                <p>Waiting for <strong>{outgoing.name}</strong> (code <span class="mono">{outgoing.code}</span>) to respond. You can leave this page; the request stays open.</p>
+                <div><button class="btn btn-small" onclick={() => run(cancelMergeRequest, "Merge request cancelled.")} disabled={busy}>Cancel request</button></div>
+            {:else if members.length > 0}
+                <p class="hint">Other events are merged into yours. Remove them first to merge into someone else.</p>
+            {:else}
+                <p class="hint">Enter the host's attendee code. If they accept, your attendees switch to their screen and code.</p>
+                <form class="request" onsubmit={(e) => { e.preventDefault(); submitMergeRequest(); }}>
+                    <div class="digits" role="group" aria-label="Host's attendee code">
+                        {#each [0, 1, 2, 3] as i}
+                            <input
+                                type="text"
+                                inputmode="numeric"
+                                maxlength="1"
+                                class="digit"
+                                aria-label="Digit {i + 1} of 4"
+                                value={[digit1, digit2, digit3, digit4][i]}
+                                bind:this={inputRefs[i]}
+                                oninput={(e) => handleDigitInput(e, i)}
+                                onkeydown={(e) => handleDigitKeydown(e, i)}
+                                onpaste={handlePaste}
+                            />
+                        {/each}
+                    </div>
+                    <button class="btn btn-primary" disabled={busy || targetDestinationCode.length !== 4}>Send request</button>
+                </form>
+            {/if}
+        </section>
     {/if}
 </div>
 
-{#if state && !isBridged}
-<div class="config">
-    <div style="margin-top: 25px;">
-        <h4 style="margin-bottom: 8px;">Incoming Merge Requests</h4>
+<style>
+    .merge { display: grid; gap: 24px; }
+    .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    h2 { font-size: 1.3rem; }
+    h3 { font-size: 1.05rem; }
+    .hint { margin-top: 4px; }
 
-        {#if incomingRequests.length === 0}
-            <p style="margin-top: 10px; margin-bottom: 10px; color: #666;">No pending incoming requests. New ones appear here automatically.</p>
-        {:else}
-            <p>Events that merge into yours will use your event code</p>
-            <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
-                {#each incomingRequests as req (req.code)}
-                    <div transition:slide style="display: flex; align-items: center; justify-content: space-between; background: #bfbfbf; padding: 12px; border-radius: 20px; border: 1px solid #ddd; width: min(600px, 100%); box-sizing: border-box; align-self: center">
-                        <div style="justify-content: left; margin-left: 10px">
-                            <img style:margin-top=0px class="mergePfp" src="https://cachet.hackclub.com/users/{req.slack}/r" alt="{req.name}'s profile" />
-                            <p style:margin-bottom=0px style:font-family="Host Grotesk, Montserrat"><strong>{req.name}</strong>{req.cityName ? ` · ${req.cityName}` : ""}</p>
-                        </div>
-                        <div>
-                            <button title="Accept Request" class="bigButton" disabled={busy} onclick={() => acknowledgeMerge(req, true)} style="margin-right: 8px;"><span class="material-symbols-outlined" translate="no">check_circle</span></button>
-                            <button title="Deny Request" class="bigButton" disabled={busy} onclick={() => acknowledgeMerge(req, false)}><span class="material-symbols-outlined" translate="no">cancel</span></button>
-                        </div>
-                    </div>
-                {/each}
-            </div>
-        {/if}
-    </div>
-</div>
+    .conn {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        background: var(--live-wash);
+        color: oklch(0.38 0.1 150);
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+    .conn .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); }
+    .conn.offline { background: var(--accent-wash); color: var(--ink-2); }
+    .conn.offline .dot { background: var(--accent-strong); }
 
-<div class="config">
-    <div style="margin-top: 25px; text-align: center;">
-        <h4 style="margin-bottom: 8px;">Request to Merge Into Another Event</h4>
-        {#if outgoing}
-            <p>Waiting for <strong>{outgoing.name}</strong> (code <strong>{outgoing.code}</strong>) to respond.</p>
-            <p>You can close this panel; the request stays pending.</p>
-            <p><button onclick={() => run(cancelMergeRequest, "Merge request cancelled.")} disabled={busy}>Cancel Request</button></p>
-        {:else if members.length > 0}
-            <p>Other events are merged into yours. Remove them before merging into another event.</p>
-        {:else}
-            <p>If accepted, you are assigned the event code of the event you merge into.<br><strong>Enter their event code below</strong></p>
+    .block { display: grid; gap: 10px; padding-top: 22px; border-top: 1px solid var(--line); }
 
-            <div class="digit-inputs-container">
-                {#each [0, 1, 2, 3] as i}
-                    <input
-                        type="text"
-                        inputmode="numeric"
-                        maxlength="1"
-                        class="digit-box"
-                        value={[digit1, digit2, digit3, digit4][i]}
-                        bind:this={inputRefs[i]}
-                        oninput={(e) => handleDigitInput(e, i)}
-                        onkeydown={(e) => handleDigitKeydown(e, i)}
-                        onpaste={handlePaste}
-                    />
-                {/each}
-            </div>
+    .people { list-style: none; margin: 4px 0 0; padding: 0; }
+    .people li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+    .people li:first-child { border-top: 0; }
+    .people img { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-sunken); object-fit: cover; }
+    .who { flex: 1; min-width: 0; display: grid; }
+    .sub { color: var(--ink-3); font-size: 0.88rem; }
+    .row-confirm { display: inline-flex; gap: 6px; }
 
-            <div style="margin-top: 15px;">
-                <button onclick={submitMergeRequest} disabled={busy}>Send Merge Request</button>
-            </div>
-        {/if}
-    </div>
-</div>
-{/if}
+    .danger { --btn-ink: var(--danger); }
+    .danger:hover { --btn-bg: var(--danger-wash); }
+    .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-m); background: var(--danger-wash); }
+    .confirm p { flex: 1; min-width: 200px; }
+
+    .request { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 4px; }
+    .digits { display: flex; gap: 8px; }
+    .digit {
+        width: 48px;
+        height: 56px;
+        padding: 0;
+        border: 1.5px solid var(--line);
+        border-radius: var(--radius-s);
+        background: var(--surface);
+        color: var(--ink);
+        font: 700 1.5rem/1 var(--font-mono);
+        text-align: center;
+    }
+    .digit:focus { outline: none; border-color: var(--accent-strong); box-shadow: 0 0 0 4px var(--accent-wash); }
+
+    .message { padding: 10px 14px; border-radius: var(--radius-m); font-weight: 700; }
+    .message.ok { background: var(--live-wash); color: oklch(0.38 0.1 150); }
+    .message.error { background: var(--danger-wash); color: var(--danger); }
+</style>

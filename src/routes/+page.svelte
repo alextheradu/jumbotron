@@ -1,448 +1,318 @@
 <script>
     import { resolve } from "$app/paths";
+    import { goto } from "$app/navigation";
     import { page } from "$app/state";
-    import { onMount } from "svelte";
+    import { onMount, tick } from "svelte";
+    import { slide, fade } from "svelte/transition";
     import { eventName } from "$lib/event";
-    import { fly, slide } from "svelte/transition";
+    import Backdrop from "$lib/components/Backdrop.svelte";
+    import Wordmark from "$lib/components/Wordmark.svelte";
 
-    let showRedirectWarning = $state(false);
-    let redirectReason = $state("");
-    let redirectTimer = $state(null);
+    const AUTH_URL = "https://auth.hackclub.com/oauth/authorize?client_id=e86d4d7eec9c546e6c4700388d4fea7f&redirect_uri=https%3A%2F%2Fjumbotron.hackclub.com%2Fcallback&response_type=code&scope=name+verification_status+slack_id";
 
-    let attendeeError = $state(null);
+    let digits = $state(["", "", "", ""]);
+    let inputs = [];
+    let status = $state("idle"); // idle | checking | error
+    let errorText = $state("");
+    let joining = $state(null); // { city } while following an invite link
+    let joinTimer = null;
+    let organizerOpen = $state(false);
+    let hasCreds = $state(false);
+
+    let code = $derived(digits.join(""));
 
     onMount(async () => {
-        let code = page.url.searchParams.get("code");
-        if (code) {
-            const response = await getPacket(code);
-            if (response === false) {
-                selectUserType("attendee");
-                attendeeError = "This link is for an event that does not exist. Please enter the correct code below, or ask an organizer.";
-            } else {
-                sessionStorage.setItem("eventCode", code);
-                redirectReason = "Redirecting based on the event code provided in your link.";
-                showRedirectWarning = true;
-                redirectTimer = setTimeout(() => {
-                    window.location.href = resolve(`/attendee`);
-                }, 5000);
+        hasCreds = !!localStorage.getItem("creds");
+
+        const linkCode = page.url.searchParams.get("code");
+        if (linkCode) {
+            fill(linkCode, 0);
+            const result = await lookup(linkCode);
+            if (result.ok) {
+                // Invite links get a short, cancellable pause so a shared screen can't hijack the page.
+                joining = { city: result.data.cityName || "" };
+                joinTimer = setTimeout(enter, 1500);
             }
-        } else if (localStorage.getItem("creds")) {
-            /*
-            redirectReason = "Redirecting based on your saved staff credentials.";
-            showRedirectWarning = true;
-            redirectTimer = setTimeout(() => {
-                window.location.href = resolve("/staff");
-            }, 5000);
-            */
         }
     });
 
-    async function getPacket(code) {
+    async function lookup(value) {
+        status = "checking";
+        errorText = "";
         try {
-            const response = await fetch(`https://api.jumbotron.hackclub.com/getPacket?code=${code}`);
-            const data = await response.json();
-
+            const response = await fetch(`https://api.jumbotron.hackclub.com/getPacket?code=${encodeURIComponent(value)}`);
+            const data = await response.json().catch(() => ({}));
             if (!response.ok || data.error) {
-                if (attendeeError == null) {
-                    attendeeError = "No event was found under this code. Make sure you've entered it correctly, or ask an organizer.";
-                }
-                return false;
+                status = "error";
+                errorText = `No event uses code ${value}. Check the code on the screen, or ask an organizer.`;
+                return { ok: false };
             }
-
             sessionStorage.setItem("eventPacket", JSON.stringify(data));
-            sessionStorage.setItem("eventCode", code);
-            return true;
-        } catch (err) {
-            attendeeError = "Failed to connect to the server. Please try again.";
-            return false;
+            sessionStorage.setItem("eventCode", value);
+            status = "idle";
+            return { ok: true, data };
+        } catch {
+            status = "error";
+            errorText = "Can't reach Jumbotron right now. Check your connection and try again.";
+            return { ok: false };
         }
     }
 
-    function cancelRedirect() {
-        if (redirectTimer) {
-            clearTimeout(redirectTimer);
-            redirectTimer = null;
-        }
-        showRedirectWarning = false;
-        redirectReason = "";
+    function enter() {
+        goto(resolve("/attendee"));
     }
 
-    // State to track which view/form is active: null, 'organizer', or 'attendee'
-    let userType = $state(null); 
-
-    function selectUserType(type) {
-        userType = type;
-        attendeeError = null; // Clear error when switching views
+    function cancelJoin() {
+        clearTimeout(joinTimer);
+        joining = null;
+        tick().then(() => inputs[3]?.focus());
     }
 
-    function resetSelection() {
-        userType = null;
-        attendeeError = null;
+    // Spread typed, pasted or autofilled digits across the boxes starting at `from`.
+    function fill(text, from) {
+        const incoming = String(text).replace(/\D/g, "").slice(0, 4 - from).split("");
+        incoming.forEach((d, i) => (digits[from + i] = d));
+        return from + incoming.length;
     }
 
-    let widthVar = $state();
-
-    // State for the 4-digit code inputs
-    let digits = $state(['', '', '', '']);
-    let inputElements = [];
-
-    // Function to ensure the code is turned into a single string
-    function getFullCode(input) {
-        if (Array.isArray(input)) {
-            return input.join('');
-        }
-        return String(input);
-    }
-
-    // Check if all 4 digits are filled out
-    let isCodeComplete = $derived(digits.every(digit => digit !== ''));
-
-    function handleInput(event, index) {
-        const value = event.target.value;
-        
-        if (value.length > 1) {
-            digits[index] = value[value.length - 1];
-        }
-
-        if (digits[index] && index < 3) {
-            inputElements[index + 1].focus();
+    async function submitIfComplete() {
+        if (code.length !== 4 || status === "checking") return;
+        const result = await lookup(code);
+        if (result.ok) {
+            enter();
+        } else {
+            await tick();
+            inputs[0]?.focus();
+            inputs[0]?.select();
         }
     }
 
-    function handleKeydown(event, index) {
-        if (event.key === 'Backspace' && !digits[index] && index > 0) {
-            inputElements[index - 1].focus();
-        }
+    function onInput(event, index) {
+        const raw = event.target.value;
+        digits[index] = "";
+        const next = fill(raw, index);
+        event.target.value = digits[index];
+        if (status === "error") status = "idle";
+        if (next > index) inputs[Math.min(next, 3)]?.focus();
+        submitIfComplete();
     }
 
-    async function handleSubmit(event) {
+    function onPaste(event, index) {
         event.preventDefault();
-        const code = getFullCode(digits);
-        attendeeError = null; 
-        let success = await getPacket(code);
-        if (success) {
-            redirectReason = "Redirecting based on your successfully verified event code.";
-            showRedirectWarning = true;
-            redirectTimer = setTimeout(() => {
-                window.location.href = resolve("/attendee");
-            }, 5000);
+        const next = fill(event.clipboardData.getData("text"), index);
+        inputs[Math.min(next, 3)]?.focus();
+        submitIfComplete();
+    }
+
+    function onKeydown(event, index) {
+        if (event.key === "Backspace" && !digits[index] && index > 0) {
+            event.preventDefault();
+            digits[index - 1] = "";
+            inputs[index - 1].focus();
+        } else if (event.key === "ArrowLeft" && index > 0) {
+            inputs[index - 1].focus();
+        } else if (event.key === "ArrowRight" && index < 3) {
+            inputs[index + 1].focus();
+        } else if (event.key === "Enter") {
+            submitIfComplete();
         }
     }
 </script>
 
 <svelte:head>
-    <title>Jumbotron - {userType ? (userType === 'organizer' ? 'Organizer Sign-In' : 'Participant Sign-In') : 'Welcome'}</title>
+    <title>Join {eventName} · Jumbotron</title>
 </svelte:head>
 
-<svelte:window bind:innerWidth={widthVar}></svelte:window>
+<Backdrop mascot={!joining} />
+
+<div class="page">
+    <header>
+        <Wordmark onArt />
+    </header>
+
+    <main>
+        {#if joining}
+            <div class="joining" in:fade={{ duration: 200 }} role="status">
+                <span class="spinner" aria-hidden="true"></span>
+                <h1>Joining {eventName}{joining.city ? ` ${joining.city}` : ""}</h1>
+                <button class="btn btn-on-art" onclick={cancelJoin}>Cancel</button>
+            </div>
+        {:else}
+            <form class="join" onsubmit={(e) => { e.preventDefault(); submitIfComplete(); }}>
+                <h1 id="join-heading">Join {eventName}</h1>
+                <p class="lede" id="join-hint">Enter the 4-digit code shown at your event.</p>
+
+                <div class="boxes" role="group" aria-labelledby="join-heading" aria-describedby="join-hint">
+                    {#each digits as digit, index}
+                        <!-- SvelteKit resets focus after navigation unless an element has autofocus. -->
+                        <!-- svelte-ignore a11y_autofocus -->
+                        <input
+                            autofocus={index === 0 && !page.url.searchParams.get("code")}
+                            bind:this={inputs[index]}
+                            value={digit}
+                            class:filled={digit}
+                            type="text"
+                            inputmode="numeric"
+                            autocomplete={index === 0 ? "one-time-code" : "off"}
+                            maxlength="4"
+                            aria-label="Digit {index + 1} of 4"
+                            aria-invalid={status === "error"}
+                            disabled={status === "checking"}
+                            oninput={(e) => onInput(e, index)}
+                            onpaste={(e) => onPaste(e, index)}
+                            onkeydown={(e) => onKeydown(e, index)}
+                            onfocus={(e) => e.target.select()}
+                        />
+                    {/each}
+                </div>
+
+                <div class="feedback" aria-live="polite">
+                    {#if status === "checking"}
+                        <p class="checking"><span class="spinner small" aria-hidden="true"></span> Checking code</p>
+                    {:else if status === "error"}
+                        <p class="callout" role="alert" transition:slide={{ duration: 200 }}>
+                            <span class="icon" translate="no" aria-hidden="true">error</span>{errorText}
+                        </p>
+                    {/if}
+                </div>
+            </form>
+
+            <section class="organizer" aria-label="Organizers">
+                {#if hasCreds}
+                    <a class="btn btn-on-art" href={resolve("/staff")}>
+                        <span class="icon" translate="no" aria-hidden="true">admin_panel_settings</span>
+                        Open your organizer console
+                    </a>
+                {:else if !organizerOpen}
+                    <button class="text-link" onclick={() => (organizerOpen = true)} aria-expanded="false">
+                        Organizer? Sign in
+                    </button>
+                {:else}
+                    <div class="org-panel" transition:slide={{ duration: 260 }}>
+                        <h2>Sign in as an organizer</h2>
+                        <p>Use your Hack Club account. It needs to be verified and YSWS-eligible to run Jumbotron.</p>
+                        <div class="org-actions">
+                            <a class="btn btn-primary" href={AUTH_URL}>Continue with Hack Club Auth</a>
+                            <button class="btn btn-quiet" onclick={() => (organizerOpen = false)}>Cancel</button>
+                        </div>
+                    </div>
+                {/if}
+            </section>
+        {/if}
+    </main>
+</div>
 
 <style>
-    .redirect-banner {
-        background-color: rgba(180, 50, 50, 0.623);
-        border: 4px solid rgb(246, 176, 106);
-        border-radius: 20px;
-        font-weight: 600;
-        color: white;
-        padding: 1rem 1.5rem;
-        margin-bottom: 1.5rem;
+    .page {
+        min-height: 100dvh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        padding: 40px 16px 120px;
+        color: var(--on-art);
+    }
+    header { text-align: center; }
+
+    main {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.75rem;
-        font-family: Atkinson Hyperlegible, Montserrat;
-        max-width: 400px;
+        gap: 40px;
+        padding-top: clamp(32px, 10vh, 96px);
         text-align: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
-    .redirect-banner button {
-        background-color: white;
-        color: #431d22;
-        border: none;
-        padding: 0.5rem 1rem;
-        font-weight: bold;
-        border-radius: 4px;
+    h1 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: clamp(2.4rem, 7vw, 3.6rem);
+        line-height: 1.05;
+        text-shadow: 0 2px 12px oklch(0.2 0.05 25 / 0.35);
+    }
+    .lede { margin-top: 10px; font-size: 1.15rem; opacity: 0.92; }
+
+    .boxes {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 28px;
+    }
+    .boxes input {
+        width: 64px;
+        height: 76px;
+        padding: 0;
+        border: 2px solid transparent;
+        border-radius: var(--radius-m);
+        background: oklch(0.985 0.01 75 / 0.92);
+        color: var(--ink);
+        font: 700 2rem/1 var(--font-mono);
+        text-align: center;
+        caret-color: var(--accent-strong);
+        box-shadow: var(--shadow-2);
+        transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
+    }
+    .boxes input:focus { outline: none; border-color: var(--accent); transform: translateY(-2px); }
+    .boxes input.filled { background: var(--surface); }
+    .boxes input[aria-invalid="true"] { border-color: var(--danger); }
+    .boxes input:disabled { opacity: 0.7; }
+
+    .feedback { min-height: 64px; margin-top: 16px; display: flex; justify-content: center; }
+    .checking { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+    .callout {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        max-width: 420px;
+        padding: 12px 16px;
+        border-radius: var(--radius-m);
+        background: var(--surface);
+        color: var(--ink);
+        text-align: left;
+        box-shadow: var(--shadow-2);
+    }
+    .callout .icon { color: var(--danger); }
+
+    .organizer { display: flex; justify-content: center; width: 100%; }
+    .text-link {
+        background: none;
+        border: 0;
+        padding: 10px 12px;
+        color: var(--on-art);
+        font: 700 1rem var(--font-text);
+        text-decoration: underline;
+        text-underline-offset: 4px;
         cursor: pointer;
+        opacity: 0.9;
     }
+    .text-link:hover { opacity: 1; }
 
-    a {
-        color: rgb(255, 223, 223);
+    .org-panel {
+        width: min(440px, 100%);
+        padding: 24px;
+        border-radius: var(--radius-l);
+        background: var(--surface);
+        color: var(--ink);
+        text-align: left;
+        box-shadow: var(--shadow-2);
     }
-    #background {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        object-fit: cover;
-        z-index: 0;
-        user-select: none;
-        -webkit-user-drag: none;
-        -moz-user-drag: none;
-    }
+    .org-panel h2 { font-size: 1.2rem; }
+    .org-panel p { margin-top: 6px; color: var(--ink-2); }
+    .org-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 
-    #leftTree {
-        z-index: 1;
-        position: fixed;
-        height: 100%;
-        top: 0;
-        left: 0;
-        object-fit: cover;
-        margin: 0 !important; 
-        padding: 0;
-    }
+    .joining { display: grid; justify-items: center; gap: 20px; }
 
-    #rightTree {
-        object-fit: cover;
-        z-index: 0;
-        position: fixed;
-        height: 100%;
-        top: 0;
-        right: 0;
-        margin: 0 !important; 
-        padding: 0;
+    .spinner {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 4px solid oklch(1 0 0 / 0.3);
+        border-top-color: var(--on-art);
+        animation: spin 0.9s linear infinite;
     }
+    .spinner.small { width: 16px; height: 16px; border-width: 2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    #pudding {
-        z-index: 1000;
-        position: fixed;
-        bottom: 0;
-        transform: translate(-50%, 0%);
-        left: 50%;
-        height: 100px;
-        opacity: 0;
-    }
-
-    #header {
-        position: relative;
-        z-index: 2;
-    }
-
-    #header::after {
-        content: "";
-        position: fixed;
-        top: 0;
-        right: 0;
-        left: 0;
-        height: 100%;
-        background-color: rgba(33, 2, 2, 0.475);
-        z-index: -1;
-        border-bottom: 8px solid rgb(246, 176, 106);
-    }
-
-    #spotlight {
-        margin-top: 80px;
-        z-index: 1000;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-family: Darumadrop One, Montserrat;
-    }
-
-    #spotlight button,
-    #spotlight .btn-link {
-        font-family: Atkinson Hyperlegible, Montserrat;
-        cursor: pointer;
-        padding: 0.75rem 1.5rem;
-        border-radius: 8px;
-        border: none;
-        background-color: rgb(246, 176, 106);
-        color: #431d22;
-        font-weight: bold;
-        text-decoration: none;
-        display: inline-block;
-        transition: transform 0.125s ease-in-out, box-shadow 0.125s ease-in-out;
-    }
-
-     .btn-link:focus,
-     .btn-link:hover {
-        box-shadow: var(--shadow-elevated);
-        transform: scale(1.0625);
-    }
-
-    #spotlight button.secondary {
-        background-color: rgba(245, 245, 245, 0.05);
-        color: white;
-        border: 2px solid white;
-        margin-top: 1rem;
-    }
-
-    .form-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-    }
-
-    fieldset {
-        border: none;
-        padding: 0;
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-    }
-
-    legend {
-        font-size: 30px;
-        font-weight: 600;
-        margin-bottom: 1.5rem;
-    }
-
-    .button-group {
-        display: flex;
-        gap: 1rem;
-        justify-content: center;
-        flex-direction: column;
-    }
-    @media (min-width: 800px) {
-        .button-group {
-            flex-direction: row;
-        }
-        #pudding {
-            opacity: 1;
-        }
-    }
-
-    button span.material-symbols-outlined {
-        vertical-align: middle;
-    }
-
-    .boxes-container {
-        display: flex;
-        gap: 0.75rem;
-        justify-content: center;
-        margin-bottom: 1.5rem;
-    }
-
-    .boxes-container input {
-        width: 3rem;
-        height: 3.5rem;
-        font-size: 1.5rem;
-        text-align: center;
-        border-radius: 8px;
-        border: 1px solid #ccc;
-        background-color: rgb(255, 255, 255);
-        color: #333;
-    }
-
-    .boxes-container input:focus {
-        outline: 2px solid rgb(246, 176, 106);
-        border-color: transparent;
+    @media (max-width: 400px) {
+        .boxes { gap: 8px; }
+        .boxes input { width: 56px; height: 68px; }
     }
 </style>
-
-<!-- Background -->
-<img src={resolve("/images/haven/background.webp")} alt="" aria-hidden="true" id="background"/>
-<img src={resolve("/images/haven/treeLeft.webp")} alt="" aria-hidden="true" id="leftTree" />
-<img src={resolve("/images/haven/treeRight.webp")} alt="" aria-hidden="true" id="rightTree" />
-{#if !showRedirectWarning}<img out:fly={{y:100}} src={resolve("/images/haven/smol-pud.webp")} alt="" aria-hidden="true" id="pudding" />{/if}
-
-<header id="header">
-    <h1 style:user-select="none" style:font-size="40px" style:margin-top="45px">
-        <img 
-            style="max-height:40px; margin-left: 5px; margin-right: 5px; transform: translateY(5px); padding: 0; display:inline" 
-            src="https://assets.hackclub.com/icon-rounded.png" 
-            alt="" 
-        />
-        <span style:font-family="Host Grotesk, Montserrat" style:color="white">Jumbotron</span>
-    </h1>
-</header>
-
-<main id="spotlight">
-    {#if showRedirectWarning}
-        <div 
-            class="redirect-banner" 
-            transition:slide 
-            role="alert" 
-            aria-live="assertive"
-        >
-            <span>You are about to be redirected.</span>
-            {#if redirectReason}
-                <span style:font-size="0.9rem" style:opacity="0.9">{redirectReason}</span>
-            {/if}
-            <button 
-                type="button" 
-                onclick={cancelRedirect} 
-                aria-label="Cancel automatic redirect"
-            >
-                Cancel Redirect
-            </button>
-        </div>
-    {/if}
-
-    {#if userType === null}
-        <!-- Initial Selection Prompt -->
-        <div class="form-container" role="region" aria-label="User Type Selection">
-            <form aria-labelledby="form-heading" onsubmit={(e) => e.preventDefault()}>
-                <fieldset>
-                    <legend style:margin-left=10px style:margin-right=10px id="form-heading">Welcome! Are you a {eventName} attendee?</legend>
-                    <div class="button-group">
-                        <button type="button" onclick={() => selectUserType('attendee')}>
-                            Yes, I'm an attendee
-                        </button>
-                        <button type="button" onclick={() => selectUserType('organizer')}>
-                            No, I'm an organizer
-                        </button> 
-                    </div>
-                </fieldset>
-            </form>
-        </div>
-
-    {:else if userType === 'organizer'}
-        <!-- Organizer Form View -->
-        <div in:slide class="form-container" role="region" aria-label="Organizer Sign-In Form">
-            <form aria-labelledby="org-heading" onsubmit={(e) => e.preventDefault()}>
-                <fieldset>
-                    <legend id="org-heading">Organizers are required to log in through <a href="https://auth.hackclub.com" target="_blank" rel="noreferrer">Hack Club Auth</a></legend>
-                    <p style:margin-top="0px" style:color="white">Your account must be verified and YSWS-eligible to use this tool.</p>
-                    <svg style="display: block; margin: 0 auto" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" xmlns="http://www.w3.org/2000/svg" aria-label="admin" viewBox="0 0 32 32" preserveAspectRatio="xMidYMid meet" fill="currentColor" width="100" height="100"><path d="M21.437 17.023a1 1 0 0 1 .785.977v2.2H23a1 1 0 0 1 .907 1.42l-2.222 4.8a1 1 0 0 1-1.907-.42v-2.2H19a1 1 0 0 1-.907-1.42l2.222-4.8a1 1 0 0 1 1.122-.557zM19.834 16.977C20.714 16.173 21 14.873 21 13a5 5 0 0 0-10 0c0 1.873.286 3.173 1.165 3.977a8.029 8.029 0 0 0-3.6 4.062c-.162.408-.213.939.162 1.168.792.485 1.632-.457 2.105-1.257a5.997 5.997 0 0 1 5.48-2.942c1.132.058 2.373-.055 3.24-.784a8.75 8.75 0 0 0 .282-.247zM19 13c0 1.683-.271 2.241-.47 2.456-.162.176-.68.544-2.53.544-1.85 0-2.368-.368-2.53-.544C13.27 15.24 13 14.683 13 13a3 3 0 1 1 6 0z"/></svg>
-                    <a 
-                        class="btn-link"
-                        style="margin-bottom: 50px; margin-top: 20px;"
-                        href="https://auth.hackclub.com/oauth/authorize?client_id=e86d4d7eec9c546e6c4700388d4fea7f&redirect_uri=https%3A%2F%2Fjumbotron.hackclub.com%2Fcallback&response_type=code&scope=name+verification_status+slack_id"
-                    >
-                        Continue
-                    </a>
-                </fieldset>
-            </form>
-                <button type="button" class="secondary" onclick={resetSelection}><span class="material-symbols-outlined" translate="no">undo</span> Back to selection</button>
-        </div>
-
-    {:else if userType === 'attendee'}
-        <div in:slide class="form-container" role="region" aria-label="Participant Check-In Form">
-            <form aria-labelledby="attendee-heading" onsubmit={handleSubmit}>
-                <fieldset>
-                    <legend id="attendee-heading">{attendeeError || "Please enter the code provided by your event"}</legend>
-                    
-                    <!-- Accessible 4-Digit Code Box Input Group -->
-                    <div class="boxes-container">
-                        {#each digits as digit, index}
-                            <input
-                                bind:this={inputElements[index]}
-                                bind:value={digits[index]}
-                                type="text"
-                                inputmode="numeric"
-                                maxlength="1"
-                                pattern="[0-9]*"
-                                aria-label="Digit {index + 1} of 4"
-                                oninput={(e) => handleInput(e, index)}
-                                onkeydown={(e) => handleKeydown(e, index)}
-                            />
-                        {/each}
-                    </div>
-
-                    {#if isCodeComplete}
-                        <div class="button-group" transition:slide>
-                            <button style="margin-bottom: 50px; margin-top: 20px;" type="submit">Continue</button>
-                        </div>
-                    {/if}
-                </fieldset>
-            </form>
-            <button type="button" class="secondary" onclick={resetSelection}><span class="material-symbols-outlined" translate="no">undo</span> Back to selection</button>
-        </div>
-    {/if}
-</main>

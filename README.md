@@ -67,8 +67,8 @@ If you've logged in, you'll also have access to Liveshare at the bottom.
 ## Setting up Jumbotron for a new Satellite
 
 Setting up Jumbotron is made to be as easy as possible. Here's what you'll need to do
-- In event.js: Update the name of the Cockpit/Organizer Portal along with the link, update the name of the Event
-- In [city]/display: A new component from lib needs to be implemented. There are template components available
+- In `src/lib/event.js`: update `eventName`, and point `eventTheme` at the new event's artwork in `static/images/`
+- In `src/lib/styles.css`: update the token block at the top (colors, fonts) to match the new event's look. Every page reads from those tokens, so nothing else needs to change
 
 You will also need to talk to someone with access to the backend on updating the list of events.
 
