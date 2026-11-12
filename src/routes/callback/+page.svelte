@@ -102,5 +102,6 @@
         box-shadow: var(--shadow-2);
     }
     h1 { font-size: 1.3rem; }
-    p { color: var(--ink-2); }
+    .panel p { color: var(--ink-2); }
+    .loading p { color: var(--on-art); }
 </style>

@@ -25,12 +25,12 @@
     <div class="row">
         <span class="text">
             <h2 id="harpa-heading">Harpa</h2>
-            <span class="sub">Lo-fi music and Pudding behind the big screen</span>
+            <span class="sub">Lo-fi music and a Dancing Pudding</span>
         </span>
         <Switch checked={harpa.enabled} label="Show harpa on the big screen" disabled={busy || !harpa.loaded} onchange={toggle} />
     </div>
     {#if harpa.enabled}
-        <p class="hint">Set the playlist, logo and MP3s with the gear at the top right of the big screen. They're saved on that laptop.</p>
+        <!-- <p class="hint">Set the playlist, logo and MP3s with the gear at the top right of the big screen. They're saved on that laptop.</p> -->
     {/if}
     {#if error}<p class="error-text" role="alert">{error}</p>{/if}
 </section>

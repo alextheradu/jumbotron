@@ -13,3 +13,14 @@ export function saveName(name) {
 
 // Collapses whitespace and trims; empty string means unusable.
 export const cleanName = (raw) => String(raw ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME);
+
+// A random id this browser keeps, so reloading doesn't add a second entry to the queue.
+export function deviceId() {
+    try {
+        let id = localStorage.getItem("demoDevice");
+        if (!id) localStorage.setItem("demoDevice", (id = crypto.randomUUID()));
+        return id;
+    } catch {
+        return crypto.randomUUID();
+    }
+}

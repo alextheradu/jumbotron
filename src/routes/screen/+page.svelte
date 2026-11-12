@@ -94,6 +94,8 @@
             else if (msg.type === "demo") applyDemo(msg.demo);
             else if (msg.type === "harpa") harpa = !!msg.harpa?.enabled;
             else if (msg.type === "signal") queue = queue.then(() => onSignal(msg)).catch(() => {});
+            else if (msg.type === "viewerSignal") viewerQueue = viewerQueue.then(() => onViewerSignal(msg)).catch(() => {});
+            else if (msg.type === "viewerLeave") closeViewer(msg.viewer);
             else if (msg.type === "replaced") {
                 // Another tab is the big screen now. Don't fight it for the slot.
                 es.close();
@@ -120,6 +122,7 @@
     }
 
     function closePeer() {
+        closeViewers();
         pc?.close();
         pc = null;
         pcFor = null;
@@ -153,6 +156,13 @@
     async function show(stream) {
         if (!video || video.srcObject === stream) return;
         video.srcObject = stream;
+        // Watchers already connected keep their connection and just get the new picture.
+        for (const peer of viewerPcs.values()) {
+            for (const sender of peer.getSenders()) {
+                const track = sender.track?.kind === "video" ? stream.getVideoTracks()[0] : null;
+                if (track) sender.replaceTrack(track).catch(() => {});
+            }
+        }
         video.muted = false;
         try {
             await video.play();
@@ -170,11 +180,66 @@
         muted = false;
     }
 
+    // Live mirror: attendees who open the viewer get the presenter's video straight from this
+    // tab over WebRTC (one connection each, capped on the server). They send the offer; this
+    // tab answers with the video it is already playing.
+    const VIEWER_KBPS = 900;
+    const VIEWER_MAX_WIDTH = 1280;
+    let viewerPcs = new Map();     // viewer id -> RTCPeerConnection
+    let viewerQueue = Promise.resolve();
+
+    function closeViewer(id) {
+        viewerPcs.get(id)?.close();
+        viewerPcs.delete(id);
+    }
+
+    function closeViewers() {
+        for (const id of [...viewerPcs.keys()]) closeViewer(id);
+    }
+
+    async function onViewerSignal({ viewer, signal }) {
+        const reply = (body) => request("/demoSignal", { viewer, signal: body }).catch(() => {});
+        if (signal.description?.type === "offer") {
+            const stream = video?.srcObject;
+            if (!stream || !stream.getVideoTracks().length) return;   // nothing to send yet; they fall back to snapshots
+            closeViewer(viewer);
+            const peer = new RTCPeerConnection({ iceServers });
+            viewerPcs.set(viewer, peer);
+            peer.onicecandidate = (e) => {
+                if (e.candidate && viewerPcs.get(viewer) === peer) reply({ candidate: e.candidate });
+            };
+            peer.onconnectionstatechange = () => {
+                if (["failed", "closed"].includes(peer.connectionState) && viewerPcs.get(viewer) === peer) closeViewer(viewer);
+            };
+            await peer.setRemoteDescription(signal.description);
+            for (const track of stream.getVideoTracks()) peer.addTrack(track, stream);   // no sound: the room already hears it
+            await peer.setLocalDescription(await peer.createAnswer());
+            await reply({ description: peer.localDescription });
+            // A shared screen can be huge. Cap size and bitrate so one laptop can feed many phones.
+            for (const sender of peer.getSenders()) {
+                if (sender.track?.kind !== "video") continue;
+                try {
+                    const params = sender.getParameters();
+                    const width = sender.track.getSettings().width || VIEWER_MAX_WIDTH;
+                    params.encodings = params.encodings?.length ? params.encodings : [{}];
+                    params.encodings[0].maxBitrate = VIEWER_KBPS * 1000;
+                    params.encodings[0].maxFramerate = 30;
+                    params.encodings[0].scaleResolutionDownBy = Math.max(1, width / VIEWER_MAX_WIDTH);
+                    await sender.setParameters(params);
+                } catch {
+                    // Older browsers ignore this; the stream still plays.
+                }
+            }
+        } else if (signal.candidate && viewerPcs.has(viewer)) {
+            await viewerPcs.get(viewer).addIceCandidate(signal.candidate);
+        }
+    }
+
     // Mirror: when organizers turn it on, attendees also see the presenter's screen. The video
     // only reaches this tab, so this tab posts a JPEG snapshot of it twice a second, skipping
     // frames where nothing changed (a still slide costs nothing).
-    const MIRROR_MS = 500;
-    const MIRROR_WIDTH = 1280;
+    const MIRROR_MS = 250;
+    const MIRROR_WIDTH = 960;
     const MIRROR_IDLE_MS = 10000;   // resend an unchanged picture this often, just in case
     let mirroring = $derived(!!(demo.enabled && demo.mirror && presenter?.live && playing));
 
@@ -207,8 +272,8 @@
             full.width = w;
             full.height = Math.round((video.videoHeight * w) / video.videoWidth);
             full.getContext("2d").drawImage(video, 0, 0, full.width, full.height);
-            let frame = full.toDataURL("image/jpeg", 0.6);
-            if (frame.length > 520000) frame = full.toDataURL("image/jpeg", 0.4);
+            let frame = full.toDataURL("image/jpeg", 0.5);
+            if (frame.length > 260000) frame = full.toDataURL("image/jpeg", 0.35);
             sending = true;
             try {
                 await request("/demoFrame", { frame });
@@ -327,7 +392,7 @@
             {/if}
 
             {#if board && content.announcement}
-                <section class="card" style:--c="var(--c-announcement)" in:fade={{ duration: 200 }}>
+                <section class="card" in:fade={{ duration: 200 }}>
                     <p class="kind"><span class="icon" translate="no" aria-hidden="true">campaign</span>Announcement</p>
                     {#if content.announcement.title}<h2>{content.announcement.title}</h2>{/if}
                     {#if content.announcement.message}<p class="body">{content.announcement.message}</p>{/if}
@@ -336,7 +401,7 @@
 
             {#if board && content.event}
                 {@const rel = relativeToNow(eventAt(content.event), now)}
-                <section class="card" style:--c="var(--c-event)" in:fade={{ duration: 200 }}>
+                <section class="card" in:fade={{ duration: 200 }}>
                     <p class="kind"><span class="icon" translate="no" aria-hidden="true">schedule</span>Up next</p>
                     <h2>{content.event.title}</h2>
                     <p class="body"><span>{content.event.time}</span>{#if rel}<span class="rel"> · {rel}</span>{/if}</p>
@@ -433,7 +498,7 @@
         border-radius: var(--radius-l);
         background: var(--surface);
         color: var(--ink);
-        box-shadow: var(--shadow-2), inset 0 6px 0 var(--c);
+        box-shadow: var(--shadow-2);
         text-align: left;
     }
     .kind { display: flex; align-items: center; gap: 0.4em; color: var(--ink-2); font-size: clamp(0.9rem, 1.3vw, 1.5rem); font-weight: 700; }
