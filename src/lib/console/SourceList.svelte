@@ -49,6 +49,7 @@
                     checked={live}
                     label="Show {item.label} to attendees"
                     disabled={busy || (!live && !buildValue(item.key))}
+                    hidden={(!live && !buildValue(item.key))}
                     onchange={(on) => toggle(item, on)}
                 />
             </li>

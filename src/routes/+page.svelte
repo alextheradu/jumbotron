@@ -1,6 +1,6 @@
 <script>
     import { resolve } from "$app/paths";
-    import { API } from "$lib/api.js";
+    import { API, AUTH_URL } from "$lib/api.js";
     import { goto } from "$app/navigation";
     import { page } from "$app/state";
     import { onMount, tick } from "svelte";
@@ -8,8 +8,6 @@
     import { eventName } from "$lib/event";
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
-
-    const AUTH_URL = "https://auth.hackclub.com/oauth/authorize?client_id=e86d4d7eec9c546e6c4700388d4fea7f&redirect_uri=https%3A%2F%2Fjumbotron.hackclub.com%2Fcallback&response_type=code&scope=name+verification_status+slack_id";
 
     let digits = $state(["", "", "", ""]);
     let inputs = [];

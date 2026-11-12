@@ -102,6 +102,7 @@
             });
             const data = await res.json();
             isAdmin = Array.isArray(data.admins) && data.admins.includes(internal.slack);
+            console.log((isAdmin ? "Is Admin" : "Is not admin"));
         } catch {
             isAdmin = false;
         }
@@ -125,7 +126,7 @@
 </script>
 
 <svelte:head>
-    <title>Organizer console · Jumbotron</title>
+    <title>Organizer Console · Jumbotron</title>
 </svelte:head>
 
 <Backdrop trees={false} scrim={0.35} />
@@ -134,7 +135,7 @@
     <header class="topbar">
         <div class="brand">
             <Wordmark onArt size="s" />
-            <span class="product">Organizer console</span>
+            <span class="product">Organizer Console</span>
         </div>
 
         {#if isAdmin || internal.initComplete}
@@ -190,8 +191,8 @@
     {:else}
         <section class="hero" in:fade={{ duration: 150 }}>
             <div class="title-block">
-                <h1>{eventName}{internal.initComplete ? ` ${internal.cityName}` : ""}</h1>
                 {#if internal.initComplete}
+                <h1>{eventName}{internal.initComplete ? ` ${internal.cityName}` : ""}</h1>
                     <div class="meta">
                         <SyncPill />
                         <button class="btn btn-small btn-on-art" onclick={() => (renaming = !renaming)} aria-expanded={renaming}>
@@ -200,7 +201,7 @@
                     </div>
                 {/if}
             </div>
-            <ShareCard />
+            {#if internal.initComplete}<ShareCard />{/if}
         </section>
 
         {#if !internal.initComplete || renaming}
@@ -228,7 +229,7 @@
                 </div>
 
                 <aside class="pane-preview" aria-label="Attendee preview">
-                    <p class="preview-label">What attendees see</p>
+                    <p style:margin-bottom=20px class="preview-label">What attendees see</p>
                     <div class="device">
                         <p class="device-title">{eventName} {internal.cityName}</p>
                         <AttendeeFeed data={liveshareData} {now} compact />

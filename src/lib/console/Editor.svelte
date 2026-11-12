@@ -53,10 +53,10 @@
                     <input class="input time" type="time" bind:value={drafts.event.at} />
                 </label>
                 <fieldset class="segmented">
-                    <legend class="field-label">Show time as</legend>
+                    <legend class="field-label">Show time as {(drafts.event.hour12) ? "12-hour" : "24-hour"}</legend>
                     <div>
-                        <label><input type="radio" name="hour-format" value={true} bind:group={drafts.event.hour12} /><span>3:30 PM</span></label>
-                        <label><input type="radio" name="hour-format" value={false} bind:group={drafts.event.hour12} /><span>15:30</span></label>
+                        <label><input type="radio" name="hour-format" value={true} bind:group={drafts.event.hour12} /><span>{formatClock(drafts.event.at, true)}</span></label>
+                        <label><input type="radio" name="hour-format" value={false} bind:group={drafts.event.hour12} /><span>{formatClock(drafts.event.at, false)}</span></label>
                     </div>
                 </fieldset>
             </div>

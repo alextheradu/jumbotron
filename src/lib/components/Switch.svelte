@@ -1,6 +1,6 @@
 <script>
     // iOS-style switch. `label` is announced to screen readers; it is not drawn.
-    let { checked = false, label, disabled = false, onchange } = $props();
+    let { checked = false, label, disabled = false, onchange, hidden = false } = $props();
 </script>
 
 <button
@@ -9,6 +9,7 @@
     aria-checked={checked}
     aria-label={label}
     {disabled}
+    {hidden}
     class="switch"
     class:on={checked}
     onclick={() => onchange?.(!checked)}
@@ -31,6 +32,7 @@
     }
     .switch.on { background: var(--live); }
     .switch[disabled] { opacity: 0.5; cursor: progress; }
+    .switch[hidden=true] { display: none }
     .thumb {
         position: absolute;
         top: 2px;
