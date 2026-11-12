@@ -5,26 +5,12 @@
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
 
-    import { isAttendeeState, finishAttendeeSignIn } from "$lib/attendeeAuth.js";
     import { API } from "$lib/api.js";
 
     let errorText = $state("");
     let backTo = $state("/");
 
     onMount(async () => {
-        // Presenters signing in for demo time come back here too (see attendeeAuth.js).
-        const state = page.url.searchParams.get("state");
-        if (isAttendeeState(state)) {
-            try {
-                await finishAttendeeSignIn(page.url.searchParams.get("code"), state);
-                window.location.replace(resolve("/attendee"));
-            } catch (e) {
-                errorText = e.message;
-                backTo = "/attendee";
-            }
-            return;
-        }
-
         if (localStorage.getItem("creds")) {
             window.location.replace(resolve("/staff"));
             return;
@@ -116,5 +102,6 @@
         box-shadow: var(--shadow-2);
     }
     h1 { font-size: 1.3rem; }
-    p { color: var(--ink-2); }
+    .panel p { color: var(--ink-2); }
+    .loading p { color: var(--on-art); }
 </style>

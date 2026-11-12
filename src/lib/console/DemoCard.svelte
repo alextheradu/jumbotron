@@ -33,11 +33,11 @@
             <span class="icon" translate="no" aria-hidden="true">tv</span>{demo.screenOpen ? "Open again" : "Open"}
         </a>
     </div>
-    <p class="hint">
+    <!-- <p class="hint">
         {demo.screenOpen
             ? "Connected. Keep that tab full screen on the projector."
             : "Open it on the laptop plugged into the projector, then press Full screen."}
-    </p>
+    </p> -->
 
     <ul>
         <li>

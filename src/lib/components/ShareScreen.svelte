@@ -1,12 +1,12 @@
 <script>
-    // Demo time on the attendee page: sign in with Hack Club, type the code from the big screen,
+    // Demo time on the attendee page: enter your name, type the code from the big screen,
     // wait in the queue until an organizer approves you, then pick a window and it plays on the
     // projector. The video goes straight from this laptop to the projector tab
     // (WebRTC); the server only checks the code and passes the handshake along.
     import { onDestroy } from "svelte";
     import { slide } from "svelte/transition";
     import { API } from "$lib/org.svelte.js";
-    import { attendeeSession, startAttendeeSignIn, signOutAttendee, RESUME_KEY } from "$lib/attendeeAuth.js";
+    import { savedName, saveName, cleanName, deviceId, MAX_NAME } from "$lib/presenterName.js";
 
     // `presenting` tells the page this device is sharing (so it doesn't mirror itself back).
     let { code, presenting = $bindable(false) } = $props();
@@ -16,7 +16,7 @@
     $effect(() => {
         presenting = step === "pick" || step === "connecting" || step === "live";
     });
-    let me = $state(null);          // { session, name, slack } from Hack Club sign-in
+    let name = $state(savedName()); // typed by the presenter; not verified
     let position = $state(0);       // place in the queue, 1 = next
     let screenCode = $state("");
     let busy = $state(false);
@@ -44,26 +44,9 @@
         closed: "Your screenshare ended."
     };
 
-    try { me = attendeeSession(); } catch {}
-    // Back from Hack Club sign-in: carry on where they left off.
-    try {
-        if (sessionStorage.getItem(RESUME_KEY)) {
-            sessionStorage.removeItem(RESUME_KEY);
-            if (me) step = "code";
-        }
-    } catch {}
-
     function begin() {
         notice = "";
-        me = attendeeSession();
-        if (!me) return startAttendeeSignIn();
         step = "code";
-    }
-
-    function switchAccount() {
-        signOutAttendee();
-        me = null;
-        startAttendeeSignIn();
     }
 
     async function send(path, body) {
@@ -82,12 +65,13 @@
         busy = true;
         error = "";
         try {
-            const { response, data } = await send("/demoJoin", { token: undefined, screenCode, session: me?.session });
-            if (data.signIn) {
-                // Session expired or revoked: sign in again, then come back here.
-                signOutAttendee();
-                return startAttendeeSignIn();
+            const who = cleanName(name);
+            if (!who) {
+                error = "Type your name so organizers know who you are.";
+                return;
             }
+            saveName(who);
+            const { response, data } = await send("/demoJoin", { token: undefined, screenCode, name: who, device: deviceId() });
             if (!response.ok || !data.token) {
                 error = data.error || "Couldn't join. Try again.";
                 return;
@@ -230,13 +214,10 @@
         </button>
     {:else if step === "code"}
         <form onsubmit={join} transition:slide={{ duration: 200 }}>
-            {#if me}
-                <p class="me">
-                    {#if me.slack}<img src={`https://cachet.hackclub.com/users/${me.slack}/r`} alt="" />{/if}
-                    <span>Presenting as <strong>{me.name}</strong></span>
-                    <button type="button" class="link" onclick={switchAccount}>Not you?</button>
-                </p>
-            {/if}
+            <label class="field">
+                <span>Your name</span>
+                <input class="input" bind:value={name} maxlength={MAX_NAME} autocomplete="name" placeholder="Ada Lovelace" required />
+            </label>
             <label class="field">
                 <span>Code on the big screen</span>
                 <input
@@ -263,7 +244,7 @@
             <button class="btn btn-quiet" onclick={stop}>Leave the queue</button>
         </div>
     {:else if step === "pick"}
-        <h2>You're up, {me?.name ?? "you"}</h2>
+        <h2>You're up, {cleanName(name) || "you"}</h2>
         <p class="body">Pick the window or tab with your project. It goes on the big screen right away.</p>
         {#if error}<p class="error-text" role="alert">{error}</p>{/if}
         <div class="actions">
@@ -313,9 +294,6 @@
     h2 { font-size: 1.3rem; text-wrap: balance; }
     .body { color: var(--ink-2); }
     form { display: grid; gap: 14px; }
-    .me { display: flex; align-items: center; gap: 10px; color: var(--ink-2); }
-    .me img { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-sunken); object-fit: cover; }
-    .link { padding: 0; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 0.88rem; text-decoration: underline; cursor: pointer; }
     .digits { max-width: 9ch; font-size: 1.5rem; letter-spacing: 0.25em; text-align: center; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .share > .btn { justify-self: start; }

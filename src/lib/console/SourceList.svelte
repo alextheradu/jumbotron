@@ -55,7 +55,7 @@
         {/each}
     </ul>
 
-    <p class="hint">Flip a switch to show or hide something. Closing this tab won't change what attendees see.</p>
+    <!-- <p class="hint">Flip a switch to show or hide something. Closing this tab won't change what attendees see.</p> -->
 </nav>
 
 <style>
