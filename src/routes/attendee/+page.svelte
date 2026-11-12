@@ -7,6 +7,7 @@
     import Wordmark from "$lib/components/Wordmark.svelte";
     import AttendeeFeed from "$lib/components/AttendeeFeed.svelte";
     import ShareScreen from "$lib/components/ShareScreen.svelte";
+    import DemoMirror from "$lib/components/DemoMirror.svelte";
     import { labelFor } from "$lib/console/drafts.svelte.js";
     import { API } from "$lib/org.svelte.js";
 
@@ -16,6 +17,8 @@
     let cityName = $state("");
     let code = $state("");
     let demos = $state(false); // organizers have turned on demo time
+    let mirror = $state(null); // { name, n }: the presenter's screen, mirrored from the big screen
+    let presenting = $state(false); // this device is the one sharing: don't mirror it back
     let connection = $state("connecting"); // connecting | live | reconnecting | offline
     let changed = $state([]);
     let announcement = $state(""); // screen-reader summary of what changed
@@ -68,6 +71,7 @@
                 const payload = JSON.parse(event.data);
                 if (payload.cityName) cityName = payload.cityName;
                 demos = !!payload.demos;
+                mirror = payload.mirror ?? null;
                 parsePacket(payload.data);
             } catch {
                 // Ignore malformed messages; the next one will carry the full state.
@@ -159,8 +163,10 @@
             <p class="sr-only" aria-live="polite">{announcement}</p>
 
             {#if demos}
-                <ShareScreen {code} />
+                <ShareScreen {code} bind:presenting />
             {/if}
+
+            <DemoMirror {code} mirror={presenting ? null : mirror} />
 
             <AttendeeFeed
                 data={liveshareData}

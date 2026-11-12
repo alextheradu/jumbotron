@@ -1,3 +1,5 @@
+import { API } from "$lib/api.js";
+
 export let eventName = "Haven" // Used to change the name of the Satellite event across Jumbotron and to make updating the UI between events easier
 
 // Artwork for the current event. Colors and fonts live in the token block at the top of $lib/styles.css.
@@ -44,7 +46,7 @@ export function proccessEventCity(name) {
 }
 
 export async function checkCity(name) {
-    let rawData = await fetch(`https://api.jumbotron.hackclub.com/data?eventName=${proccessCity(name)}`);
+    let rawData = await fetch(`${API}/data?eventName=${proccessCity(name)}`);
     if (!rawData.ok) {
         console.log("Failed")
         return false;

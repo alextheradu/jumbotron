@@ -1,6 +1,7 @@
 <script>
     import { eventName } from "$lib/event";
     import { internal } from "$lib/liveshare.svelte.js";
+    import { API } from "$lib/api.js";
 
     // `oncancel` is only passed when renaming an event that's already set up.
     let { oncancel, ondone } = $props();
@@ -18,7 +19,7 @@
         saving = true;
         errorText = "";
         try {
-            const response = await fetch("https://api.jumbotron.hackclub.com/initEvent", {
+            const response = await fetch(`${API}/initEvent`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ code: internal.code, password: internal.password, cityName: display })
