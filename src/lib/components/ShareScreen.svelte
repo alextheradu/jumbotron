@@ -6,7 +6,7 @@
     import { onDestroy } from "svelte";
     import { slide } from "svelte/transition";
     import { API } from "$lib/org.svelte.js";
-    import { savedName, saveName, cleanName, MAX_NAME } from "$lib/presenterName.js";
+    import { savedName, saveName, cleanName, deviceId, MAX_NAME } from "$lib/presenterName.js";
 
     // `presenting` tells the page this device is sharing (so it doesn't mirror itself back).
     let { code, presenting = $bindable(false) } = $props();
@@ -71,7 +71,7 @@
                 return;
             }
             saveName(who);
-            const { response, data } = await send("/demoJoin", { token: undefined, screenCode, name: who });
+            const { response, data } = await send("/demoJoin", { token: undefined, screenCode, name: who, device: deviceId() });
             if (!response.ok || !data.token) {
                 error = data.error || "Couldn't join. Try again.";
                 return;
