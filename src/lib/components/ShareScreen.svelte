@@ -1,16 +1,23 @@
 <script>
-    // Demo time on the attendee page: type the code from the big screen, pick a window, and it
-    // plays on the projector. The video goes straight from this laptop to the projector tab
+    // Demo time on the attendee page: sign in with Hack Club, type the code from the big screen,
+    // wait in the queue until an organizer approves you, then pick a window and it plays on the
+    // projector. The video goes straight from this laptop to the projector tab
     // (WebRTC); the server only checks the code and passes the handshake along.
     import { onDestroy } from "svelte";
     import { slide } from "svelte/transition";
     import { API } from "$lib/org.svelte.js";
+    import { attendeeSession, startAttendeeSignIn, signOutAttendee, RESUME_KEY } from "$lib/attendeeAuth.js";
 
-    let { code } = $props();
+    // `presenting` tells the page this device is sharing (so it doesn't mirror itself back).
+    let { code, presenting = $bindable(false) } = $props();
 
-    // idle -> code -> pick -> connecting -> live. Leaving any step goes back to idle.
+    // idle -> code -> queued -> pick -> connecting -> live. Leaving any step goes back to idle.
     let step = $state("idle");
-    let name = $state("");
+    $effect(() => {
+        presenting = step === "pick" || step === "connecting" || step === "live";
+    });
+    let me = $state(null);          // { session, name, slack } from Hack Club sign-in
+    let position = $state(0);       // place in the queue, 1 = next
     let screenCode = $state("");
     let busy = $state(false);
     let error = $state("");
@@ -30,13 +37,34 @@
     const ENDED = {
         stopped: "An organizer stopped your screenshare.",
         demos_off: "Demo time is over.",
-        replaced: "Someone else is on the big screen now.",
-        timeout: "That took a little too long. Enter the new code to try again.",
+        replaced: "An organizer gave the big screen to someone else. Join the queue again if you still want to present.",
+        removed: "An organizer took you out of the queue.",
+        timeout: "That took a little too long. Join the queue again to try again.",
         lost: "Lost connection to the big screen.",
         closed: "Your screenshare ended."
     };
 
-    try { name = localStorage.getItem("demoName") || ""; } catch {}
+    try { me = attendeeSession(); } catch {}
+    // Back from Hack Club sign-in: carry on where they left off.
+    try {
+        if (sessionStorage.getItem(RESUME_KEY)) {
+            sessionStorage.removeItem(RESUME_KEY);
+            if (me) step = "code";
+        }
+    } catch {}
+
+    function begin() {
+        notice = "";
+        me = attendeeSession();
+        if (!me) return startAttendeeSignIn();
+        step = "code";
+    }
+
+    function switchAccount() {
+        signOutAttendee();
+        me = null;
+        startAttendeeSignIn();
+    }
 
     async function send(path, body) {
         const response = await fetch(`${API}${path}`, {
@@ -54,15 +82,21 @@
         busy = true;
         error = "";
         try {
-            const { response, data } = await send("/demoJoin", { token: undefined, screenCode, name });
+            const { response, data } = await send("/demoJoin", { token: undefined, screenCode, session: me?.session });
+            if (data.signIn) {
+                // Session expired or revoked: sign in again, then come back here.
+                signOutAttendee();
+                return startAttendeeSignIn();
+            }
             if (!response.ok || !data.token) {
                 error = data.error || "Couldn't join. Try again.";
                 return;
             }
             token = data.token;
             iceServers = data.iceServers || [];
-            try { localStorage.setItem("demoName", name.trim()); } catch {}
-            step = "pick";
+            position = 0;
+            step = "queued";
+            listen();
         } catch {
             error = "Can't reach Jumbotron right now. Check your connection.";
         } finally {
@@ -83,7 +117,9 @@
         // The browser's own "Stop sharing" bar.
         media.getVideoTracks()[0].addEventListener("ended", () => stop());
         step = "connecting";
-        listen();
+        // Tells the server we're ready; it answers on the feed with "ready" to start the handshake.
+        const { response } = await send("/demoPicked").catch(() => ({}));
+        if (!response?.ok) finish(ENDED.closed);
     }
 
     function listen() {
@@ -92,6 +128,14 @@
             let msg;
             try { msg = JSON.parse(event.data); } catch { return; }
             if (msg.type === "ended") return finish(ENDED[msg.reason] || ENDED.closed);
+            if (msg.type === "queued") {
+                position = msg.position;
+                return;
+            }
+            if (msg.type === "approved") {
+                if (step === "queued") step = "pick";
+                return;
+            }
             // One at a time, in order: an ICE candidate can't be added until the answer is in.
             queue = queue.then(() => handle(msg)).catch(() => {});
         };
@@ -144,6 +188,7 @@
         teardown();
         token = null;
         screenCode = "";
+        position = 0;
         notice = message;
         step = "idle";
     }
@@ -180,15 +225,18 @@
     {:else if step === "idle"}
         <h2>Show your project on the big screen</h2>
         {#if notice}<p class="body" role="status">{notice}</p>{/if}
-        <button class="btn btn-primary" onclick={() => { notice = ""; step = "code"; }}>
+        <button class="btn btn-primary" onclick={begin}>
             <span class="icon" translate="no" aria-hidden="true">cast</span>Share my screen
         </button>
     {:else if step === "code"}
         <form onsubmit={join} transition:slide={{ duration: 200 }}>
-            <label class="field">
-                <span>Your name</span>
-                <input class="input" bind:value={name} maxlength="40" autocomplete="given-name" required />
-            </label>
+            {#if me}
+                <p class="me">
+                    {#if me.slack}<img src={`https://cachet.hackclub.com/users/${me.slack}/r`} alt="" />{/if}
+                    <span>Presenting as <strong>{me.name}</strong></span>
+                    <button type="button" class="link" onclick={switchAccount}>Not you?</button>
+                </p>
+            {/if}
             <label class="field">
                 <span>Code on the big screen</span>
                 <input
@@ -208,8 +256,14 @@
                 <button type="button" class="btn btn-quiet" onclick={() => finish()}>Cancel</button>
             </div>
         </form>
+    {:else if step === "queued"}
+        <h2 role="status">{position === 1 ? "You're next" : position > 1 ? `You're #${position} in line` : "Joining the queue"}</h2>
+        <p class="body">An organizer will let you on the big screen. Keep this page open; you'll pick what to share when it's your turn.</p>
+        <div class="actions">
+            <button class="btn btn-quiet" onclick={stop}>Leave the queue</button>
+        </div>
     {:else if step === "pick"}
-        <h2>You're up, {name.trim()}</h2>
+        <h2>You're up, {me?.name ?? "you"}</h2>
         <p class="body">Pick the window or tab with your project. It goes on the big screen right away.</p>
         {#if error}<p class="error-text" role="alert">{error}</p>{/if}
         <div class="actions">
@@ -243,8 +297,9 @@
         border-radius: var(--radius-l);
         background: var(--surface);
         color: var(--ink);
-        box-shadow: var(--shadow-1), inset 0 4px 0 var(--c);
+        box-shadow: var(--shadow-1);
     }
+    .kind .icon { display: grid; place-items: center; width: 1.9em; height: 1.9em; border-radius: 50%; background: color-mix(in oklab, var(--c) 22%, var(--surface)); color: var(--ink); font-size: 1em; }
     .share.live { --c: var(--live); }
     .kind {
         display: flex;
@@ -258,6 +313,9 @@
     h2 { font-size: 1.3rem; text-wrap: balance; }
     .body { color: var(--ink-2); }
     form { display: grid; gap: 14px; }
+    .me { display: flex; align-items: center; gap: 10px; color: var(--ink-2); }
+    .me img { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-sunken); object-fit: cover; }
+    .link { padding: 0; border: 0; background: none; color: var(--ink-3); font: inherit; font-size: 0.88rem; text-decoration: underline; cursor: pointer; }
     .digits { max-width: 9ch; font-size: 1.5rem; letter-spacing: 0.25em; text-align: center; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .share > .btn { justify-self: start; }

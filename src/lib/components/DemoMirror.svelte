@@ -1,0 +1,122 @@
+<script>
+    // The presenter's screen on an attendee's device, while organizers have the mirror on.
+    // `mirror` is { name, n } from /getSession: n is the newest snapshot the big screen posted.
+    // It opens full screen on its own when a demo starts; the attendee can shrink it to a pill
+    // and open it again.
+    import { fade } from "svelte/transition";
+    import { API } from "$lib/org.svelte.js";
+
+    let { code, mirror = null } = $props();
+
+    let open = $state(true);
+    let src = $state("");            // the frame on screen; swapped only once the next one loaded
+    let viewer = $state();
+    let isFullscreen = $state(false);
+    let lastName = null;
+    let loading = null;
+
+    // A new presenter gets the attendee's attention again.
+    $effect(() => {
+        const name = mirror?.name ?? null;
+        if (name && name !== lastName) open = true;
+        lastName = name;
+        if (!name) src = "";
+    });
+
+    // Load the newest frame off screen, then swap, so the picture never flashes blank. A frame
+    // that arrives while another is loading replaces it (only the newest matters).
+    $effect(() => {
+        if (!mirror) return;
+        const url = `${API}/demoFrame?code=${encodeURIComponent(code)}&n=${mirror.n}`;
+        const img = new Image();
+        loading = img;
+        img.onload = () => {
+            if (loading === img) src = url;
+        };
+        img.src = url;
+    });
+
+    function goFullscreen() {
+        viewer?.requestFullscreen?.().catch(() => {});
+    }
+
+    function close() {
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+        open = false;
+    }
+
+    const canFullscreen = typeof document !== "undefined" && !!document.fullscreenEnabled;
+</script>
+
+<svelte:document onfullscreenchange={() => (isFullscreen = !!document.fullscreenElement)} onkeydown={(e) => open && mirror && e.key === "Escape" && !isFullscreen && close()} />
+
+{#if mirror}
+    {#if open}
+        <div class="viewer" bind:this={viewer} role="dialog" aria-modal="true" aria-label="{mirror.name}'s screen" transition:fade={{ duration: 150 }}>
+            {#if src}
+                <img {src} alt="{mirror.name}'s shared screen, live from the big screen" />
+            {:else}
+                <p class="waiting" role="status"><span class="spinner" aria-hidden="true"></span>Loading {mirror.name}'s screen</p>
+            {/if}
+            <div class="bar">
+                <p class="who"><span class="live" aria-hidden="true"></span>{mirror.name}'s screen</p>
+                <div class="actions">
+                    {#if canFullscreen && !isFullscreen}
+                        <button class="btn btn-small btn-on-art" onclick={goFullscreen}>
+                            <span class="icon" translate="no" aria-hidden="true">fullscreen</span>Full screen
+                        </button>
+                    {/if}
+                    <button class="btn btn-small btn-on-art" onclick={close} aria-label="Close the shared screen">
+                        <span class="icon" translate="no" aria-hidden="true">close</span>Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    {:else}
+        <button class="reopen btn btn-primary" onclick={() => (open = true)} transition:fade={{ duration: 150 }}>
+            <span class="icon" translate="no" aria-hidden="true">present_to_all</span>Watch {mirror.name}'s screen
+        </button>
+    {/if}
+{/if}
+
+<style>
+    .viewer {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: grid;
+        place-items: center;
+        background: #000;
+        color: var(--on-art);
+    }
+    img { width: 100%; height: 100%; object-fit: contain; }
+    .bar {
+        position: absolute;
+        inset: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: max(10px, env(safe-area-inset-top)) 12px 10px;
+        background: linear-gradient(rgb(0 0 0 / 0.7), transparent);
+    }
+    .who { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .live { flex: none; width: 9px; height: 9px; border-radius: 50%; background: oklch(0.68 0.2 27); animation: breathe 2s ease-in-out infinite; }
+    .actions { display: flex; gap: 8px; flex: none; }
+    .waiting { display: flex; align-items: center; gap: 0.6em; font-weight: 700; }
+    .spinner { width: 1em; height: 1em; border: 0.14em solid rgb(255 255 255 / 0.3); border-top-color: var(--on-art); border-radius: 50%; animation: spin 0.9s linear infinite; }
+    .reopen {
+        position: fixed;
+        left: 50%;
+        bottom: max(16px, env(safe-area-inset-bottom));
+        z-index: 50;
+        transform: translateX(-50%);
+        box-shadow: var(--shadow-2);
+        white-space: nowrap;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes breathe { 50% { opacity: 0.4; } }
+    @media (prefers-reduced-motion: reduce) {
+        .live, .spinner { animation: none; }
+    }
+</style>

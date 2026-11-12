@@ -10,6 +10,8 @@
     import { internal } from "$lib/liveshare.svelte.js";
     import { API, request } from "$lib/org.svelte.js";
     import { relativeToNow, parseClock, toAt } from "$lib/time.js";
+
+    const HARPA_URL = import.meta.env.VITE_HARPA_URL || "https://harpa.hackclub.com/";
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
 
@@ -25,6 +27,7 @@
     let idle = $state(false);      // no mouse movement lately: hide the cursor and the buttons
     let now = $state(new Date());
     let video = $state();
+    let harpa = $state(false);     // the organizer turned harpa on for this event
 
     let iceServers = [];
     let feed = null;       // public content, the same stream attendees get
@@ -39,6 +42,9 @@
     let joinLink = $derived(`jumbotron.hackclub.com/?code=${internal.code ?? ""}`);
     let presenter = $derived(demo.enabled ? demo.presenter : null);
     let board = $derived(demo.board !== false);
+    // Harpa plays its own music, which would talk over a live presenter: it's unloaded while
+    // someone presents and reloads afterwards (harpa picks up where it left off).
+    let showHarpa = $derived(harpa && !presenter?.live);
     const eventAt = (ev) => ev.at || toAt(parseClock(ev.time));
 
     function openFeed() {
@@ -86,6 +92,7 @@
             try { msg = JSON.parse(event.data); } catch { return; }
             if (msg.type === "hello") iceServers = msg.iceServers || [];
             else if (msg.type === "demo") applyDemo(msg.demo);
+            else if (msg.type === "harpa") harpa = !!msg.harpa?.enabled;
             else if (msg.type === "signal") queue = queue.then(() => onSignal(msg)).catch(() => {});
             else if (msg.type === "replaced") {
                 // Another tab is the big screen now. Don't fight it for the slot.
@@ -163,6 +170,60 @@
         muted = false;
     }
 
+    // Mirror: when organizers turn it on, attendees also see the presenter's screen. The video
+    // only reaches this tab, so this tab posts a JPEG snapshot of it twice a second, skipping
+    // frames where nothing changed (a still slide costs nothing).
+    const MIRROR_MS = 500;
+    const MIRROR_WIDTH = 1280;
+    const MIRROR_IDLE_MS = 10000;   // resend an unchanged picture this often, just in case
+    let mirroring = $derived(!!(demo.enabled && demo.mirror && presenter?.live && playing));
+
+    $effect(() => {
+        if (!mirroring) return;
+        const full = document.createElement("canvas");
+        const thumb = document.createElement("canvas");
+        thumb.width = 160;
+        thumb.height = 90;
+        const thumbCtx = thumb.getContext("2d", { willReadFrequently: true });
+        let last = null;
+        let lastSent = 0;
+        let sending = false;
+
+        function changed() {
+            thumbCtx.drawImage(video, 0, 0, thumb.width, thumb.height);
+            const px = thumbCtx.getImageData(0, 0, thumb.width, thumb.height).data;
+            let moved = !last;
+            for (let i = 0; !moved && i < px.length; i += 4) {
+                moved = Math.abs(px[i] - last[i]) > 10 || Math.abs(px[i + 1] - last[i + 1]) > 10 || Math.abs(px[i + 2] - last[i + 2]) > 10;
+            }
+            last = px;
+            return moved;
+        }
+
+        async function tick() {
+            if (sending || !video?.videoWidth) return;
+            if (!changed() && Date.now() - lastSent < MIRROR_IDLE_MS) return;
+            const w = Math.min(MIRROR_WIDTH, video.videoWidth);
+            full.width = w;
+            full.height = Math.round((video.videoHeight * w) / video.videoWidth);
+            full.getContext("2d").drawImage(video, 0, 0, full.width, full.height);
+            let frame = full.toDataURL("image/jpeg", 0.6);
+            if (frame.length > 520000) frame = full.toDataURL("image/jpeg", 0.4);
+            sending = true;
+            try {
+                await request("/demoFrame", { frame });
+            } catch {
+                // The next tick tries again.
+            } finally {
+                sending = false;
+                lastSent = Date.now();
+            }
+        }
+
+        const timer = setInterval(tick, MIRROR_MS);
+        return () => clearInterval(timer);
+    });
+
     // A presenter stuck connecting usually means the wifi blocks device-to-device traffic.
     $effect(() => {
         slow = false;
@@ -232,7 +293,13 @@
 
 <svelte:window onpointermove={wake} onkeydown={wake} />
 
-<Backdrop scrim={0.4} />
+{#if showHarpa}
+    <!-- hackclub/harpa, embedded as-is so its updates show up here. Its settings (gear, top
+         right) are stored in this browser, so set it up on the projector laptop. -->
+    <iframe class="harpa" src={HARPA_URL} title="Harpa lo-fi music" allow="autoplay; encrypted-media; fullscreen" transition:fade={{ duration: 300 }}></iframe>
+{:else}
+    <Backdrop scrim={0.4} />
+{/if}
 
 {#if status === "signedout" || status === "replaced"}
     <main class="message">
@@ -248,14 +315,16 @@
         {/if}
     </main>
 {:else if status === "ready"}
-    <div class="screen" class:idle>
+    <div class="screen" class:idle class:harpa>
         <header>
             <Wordmark onArt />
             <span class="join">Follow along at <strong class="mono" translate="no">{joinLink}</strong></span>
         </header>
 
         <main class="stage">
-            <h1>{eventName}{cityName ? ` ${cityName}` : ""}</h1>
+            {#if !harpa}
+                <h1>{eventName}{cityName ? ` ${cityName}` : ""}</h1>
+            {/if}
 
             {#if board && content.announcement}
                 <section class="card" style:--c="var(--c-announcement)" in:fade={{ duration: 200 }}>
@@ -389,12 +458,22 @@
     .code-box { display: grid; justify-items: center; padding-left: 2vw; border-left: 1px solid rgb(255 255 255 / 0.3); font-weight: 700; }
     .code-box strong { font-size: 3em; line-height: 1; letter-spacing: 0.12em; }
 
+    /* Harpa fills the screen behind everything. Clicks go through this page's overlays to it
+       (its gear and play buttons), except on our own buttons and cards. Its gear and logos sit
+       at the top, so the join link moves to the bottom right and the wordmark steps aside. */
+    iframe.harpa { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; border: 0; background: rgb(186, 96, 35); }
+    .screen.harpa { position: relative; z-index: 1; pointer-events: none; grid-template-rows: 1fr auto auto; }
+    .screen.harpa :is(button, a, .card, .airplay) { pointer-events: auto; }
+    .screen.harpa header { grid-row: 3; justify-content: flex-end; }
+    .screen.harpa header > :global(:first-child) { display: none; }
+    .screen.harpa .stage { grid-row: 1; }
+
     .idle { cursor: none; }
     .fullscreen { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); opacity: 0.8; }
     .fullscreen:hover { opacity: 1; }
     .offline { position: fixed; left: 16px; bottom: 16px; padding: 6px 12px; border-radius: var(--radius-pill); background: rgb(20 24 32 / 0.72); color: var(--on-art); font-weight: 700; font-size: 0.85rem; }
 
-    .theatre { position: fixed; inset: 0; display: none; place-items: center; background: #000; color: var(--on-art); }
+    .theatre { position: fixed; inset: 0; z-index: 2; display: none; place-items: center; background: #000; color: var(--on-art); }
     .theatre.on { display: grid; }
     video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; }
     video.on { opacity: 1; }

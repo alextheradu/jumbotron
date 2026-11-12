@@ -1,7 +1,7 @@
 import { internal } from "$lib/liveshare.svelte";
 
-// VITE_API points a local build at a local backend.
-export const API = import.meta.env.VITE_API || "https://api.jumbotron.hackclub.com";
+import { API } from "$lib/api.js";
+export { API };
 
 // `state` mirrors the server's mergeState(): { code, role, root, members, incoming, outgoing }
 export const org = $state({
@@ -20,11 +20,31 @@ export const demo = $state({
     board: true,
     screenCode: null,
     screenOpen: false,
-    presenter: null
+    presenter: null,
+    mirror: false,   // the presenter's screen also goes to attendees' devices (as snapshots)
+    queue: []        // [{ id, name, slack, connected }] waiting for an organizer to approve them
 });
 
 export function applyDemo(next) {
     if (next) Object.assign(demo, next);
+}
+
+// Harpa (hackclub/harpa, embedded on the big screen), mirrored from the server's harpaState().
+// `loaded` is false until the first state arrives.
+export const harpa = $state({
+    loaded: false,
+    enabled: false
+});
+
+export function applyHarpa(next) {
+    if (!next) return;
+    harpa.enabled = !!next.enabled;
+    harpa.loaded = true;
+}
+
+export async function setHarpa(enabled) {
+    const data = await post("/harpaSet", { enabled });
+    applyHarpa(data.harpa);
 }
 
 const nameOf = (e) => (e && e.name) || "Another organizer";
@@ -202,6 +222,8 @@ async function openStream() {
             applyState(msg.state, msg.reason);
         } else if (msg.type === "demo") {
             applyDemo(msg.demo);
+        } else if (msg.type === "harpa") {
+            applyHarpa(msg.harpa);
         } else if (msg.type === "revoked") {
             signOutNow();
         } else if (msg.type === "reset") {
@@ -280,4 +302,7 @@ async function demoPost(path, body) {
 
 export const setDemos = (enabled) => demoPost("/demoSet", { enabled });
 export const setBoard = (board) => demoPost("/demoSet", { board });
+export const setMirror = (mirror) => demoPost("/demoSet", { mirror });
 export const stopPresenter = () => demoPost("/demoStop");
+export const approveQueued = (id) => demoPost("/demoApprove", { id });
+export const removeQueued = (id) => demoPost("/demoRemove", { id });

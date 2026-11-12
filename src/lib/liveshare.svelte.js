@@ -1,4 +1,5 @@
 import { resolve } from "$app/paths";
+import { API } from "$lib/api.js";
 
 export const internal = $state({
     initComplete: false,
@@ -49,7 +50,7 @@ export async function updateAPI() {
     syncStatus.message = "";
 
     try {
-        const response = await fetch(`https://api.jumbotron.hackclub.com/sendPacket`, {
+        const response = await fetch(`${API}/sendPacket`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

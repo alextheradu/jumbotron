@@ -1,5 +1,6 @@
 <script>
     import { resolve } from "$app/paths";
+    import { API } from "$lib/api.js";
     import { goto } from "$app/navigation";
     import { page } from "$app/state";
     import { onMount, tick } from "svelte";
@@ -40,7 +41,7 @@
         status = "checking";
         errorText = "";
         try {
-            const response = await fetch(`https://api.jumbotron.hackclub.com/getPacket?code=${encodeURIComponent(value)}`);
+            const response = await fetch(`${API}/getPacket?code=${encodeURIComponent(value)}`);
             const data = await response.json().catch(() => ({}));
             if (!response.ok || data.error) {
                 status = "error";

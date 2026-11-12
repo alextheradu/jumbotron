@@ -15,6 +15,7 @@
     import SetupCard from "$lib/console/SetupCard.svelte";
     import SourceList from "$lib/console/SourceList.svelte";
     import DemoCard from "$lib/console/DemoCard.svelte";
+    import HarpaCard from "$lib/console/HarpaCard.svelte";
     import Editor from "$lib/console/Editor.svelte";
     import Toasts from "$lib/console/Toasts.svelte";
     import AdminPanel from "$lib/console/AdminPanel.svelte";
@@ -217,6 +218,7 @@
                 <div class="panel pane-list">
                     <SourceList {selected} onselect={select} />
                     <DemoCard />
+                    <HarpaCard />
                 </div>
 
                 <div class="panel pane-editor" bind:this={editorEl}>

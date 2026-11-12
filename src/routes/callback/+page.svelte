@@ -5,9 +5,26 @@
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
 
+    import { isAttendeeState, finishAttendeeSignIn } from "$lib/attendeeAuth.js";
+    import { API } from "$lib/api.js";
+
     let errorText = $state("");
+    let backTo = $state("/");
 
     onMount(async () => {
+        // Presenters signing in for demo time come back here too (see attendeeAuth.js).
+        const state = page.url.searchParams.get("state");
+        if (isAttendeeState(state)) {
+            try {
+                await finishAttendeeSignIn(page.url.searchParams.get("code"), state);
+                window.location.replace(resolve("/attendee"));
+            } catch (e) {
+                errorText = e.message;
+                backTo = "/attendee";
+            }
+            return;
+        }
+
         if (localStorage.getItem("creds")) {
             window.location.replace(resolve("/staff"));
             return;
@@ -20,7 +37,7 @@
         }
 
         try {
-            const raw = await fetch("https://api.jumbotron.hackclub.com/genToken", {
+            const raw = await fetch(`${API}/genToken`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ code: authCode })
@@ -56,7 +73,7 @@
         <div class="panel" role="alert">
             <h1>Sign-in didn't work</h1>
             <p>{errorText}</p>
-            <a class="btn btn-primary" href={resolve("/")}>Back to Jumbotron</a>
+            <a class="btn btn-primary" href={resolve(backTo)}>Back to Jumbotron</a>
         </div>
     {:else}
         <div class="loading" role="status">
