@@ -9,13 +9,13 @@ export const internal = $state({
     password: null,
     cityName: "",
     importedSync: false
-})
+});
 
 // Kept for older components (merge panel) that still read these flags.
 export const sync = $state({
     announcements: false,
     slides: false
-})
+});
 
 export const liveshareData = $state({
     timestamp: Date.now()
@@ -59,6 +59,7 @@ export async function updateAPI() {
                 packet: JSON.stringify(liveshareData)
             })
         });
+
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
@@ -66,6 +67,7 @@ export async function updateAPI() {
                 window.location.replace(resolve("/"));
                 return false;
             }
+
             syncStatus.state = "error";
             syncStatus.message = data.error || "Couldn't reach attendees. Your change is saved here; try publishing again.";
             return false;
@@ -73,6 +75,7 @@ export async function updateAPI() {
 
         syncStatus.state = "ok";
         syncStatus.lastSynced = Date.now();
+
         return true;
     } catch {
         syncStatus.state = "error";
@@ -83,23 +86,31 @@ export async function updateAPI() {
 
 export async function publish(key, value) {
     liveshareData[key] = value;
+
     if (undoState.key === key) clearUndo();
+
     return updateAPI();
 }
 
 export async function takeDown(key, label) {
     if (!liveshareData[key]) return;
+
     undoState.key = key;
     undoState.value = $state.snapshot(liveshareData[key]);
     undoState.label = label;
+
     liveshareData[key] = null;
+
     return updateAPI();
 }
 
 export async function undoTakeDown() {
     if (!undoState.key) return;
+
     const { key, value } = undoState;
+
     clearUndo();
+
     return publish(key, value);
 }
 

@@ -11,7 +11,7 @@
     import { API, request } from "$lib/org.svelte.js";
     import { relativeToNow, parseClock, toAt } from "$lib/time.js";
 
-    const HARPA_URL = import.meta.env.VITE_HARPA_URL || "https://harpa.hackclub.com/";
+    const HARPA_URL = import.meta.env.VITE_HARPA_URL || "https://harpa.hackclub.com/?jumbotron=true";
     import Backdrop from "$lib/components/Backdrop.svelte";
     import Wordmark from "$lib/components/Wordmark.svelte";
 
